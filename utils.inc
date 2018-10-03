@@ -39,15 +39,71 @@ proc GuidToString guid:DWORD, szOut:DWORD
                 ret
 endp
 
+;proc ValidateGuidString szGUID:DWORD
+ValidateGuidString:
+                push ebx
+                push edi
+                mov ebx, utils.asciiDigitValueTable
+                mov edi, dword [esp + 2*4 + 4];[szGUID]
+
+                push edi
+                call [lstrlenA]
+
+                cmp eax, 38
+                ja .invalid
+
+                cmp eax, 36
+                jz .no_braces
+                cmp eax, 38
+                jnz .invalid
+                mov al, '{'
+                scasb
+                jnz .invalid
+                cmp byte [edi+36-1], '}'
+                jnz .invalid
+.no_braces:
+                xor ecx, ecx
+                push ecx
+                push 12
+                push 4
+                push 4
+                push 4
+                mov cl, 8
+.loop:          xchg esi, edi
+@@:             lodsb
+                xlatb
+                test al, al
+                js .invalid
+                loop @b
+                pop ecx
+                xchg esi, edi
+                jecxz .valid
+                mov al, '-'
+                scasb
+                jz .loop
+
+.invalid:       xor eax, eax
+                jmp .exit
+.valid:         mov al, 1
+.exit:          pop edi
+                pop ebx
+                retn 4h
+
 ; guid[16]:BYTE
 ;proc StringToGuid szIn:DWORD, guid:DWORD
 StringToGuid:
+                push dword [esp+4]
+                call ValidateGuidString
+                test eax, eax
+                jnz @f
+                retn 8h
+@@:
                 push ebp
                 push ebx
                 push esi
                 push edi
                 virtual at esp
-                  .regs dd 4 dup (?)    ; saved ebp esi edi
+                  .regs dd 4 dup (?)    ; saved ebp ebx esi edi
                   .addr dd ?            ; return address
                   .szIn dd ?            ; 1st param
                   .guid dd ?            ; 2nd param
@@ -98,7 +154,7 @@ StringToGuid:
                 pop esi
                 pop ebx
                 pop ebp
-                retn 8
+                retn 8h
 
                 ; convert ASCII hexdigits to integer value
                 ; esi = input, ecx = count, ebx = digit-value table
@@ -243,153 +299,3 @@ WinBioErrorText:
                 retn 4
 .no_winbio_err: xor eax, eax
                 retn 4
-
-;--------------------------------------------------------------------------;
-; Auxiliary fastcall functions for manipulating Windows registry keys.
-; ebx = hKey, esi = szValueName, edi = buffer, ecx = len (if applicable).
-; Upon return, edi = edi + ecx and CF=1 indicates an error.
-;--------------------------------------------------------------------------;
-Regaux:
-.getGuid:       virtual at esp
-                  .szGuid db 39 dup (?)
-                  .pad0   db ?
-                  .allocaSize = $ - $$
-                end virtual
-                sub esp, .allocaSize
-                lea eax, [.szGuid]
-                push 39
-                push esp
-                push eax
-                push 0
-                push RRF_RT_REG_SZ
-                push esi
-                push NULL
-                push ebx
-                call [RegGetValueA]
-                test eax, eax
-                pop eax
-                jnz .getGuid.error
-                cmp eax, 37
-                jz @f
-                cmp eax, 39
-                jnz .getGuid.error
-@@:             lea eax, [.szGuid]
-                push edi
-                push eax
-                call StringToGuid
-                clc
-.getGuid.done:  lea edi, [edi + 16]
-                lea esp, [esp + .allocaSize]
-                retn
-.getGuid.error: stc
-                jmp .getGuid.done
-
-.getSz:         push ecx
-                push ecx
-                push esp
-                push edi
-                add edi, ecx
-                push 0
-                push RRF_RT_REG_SZ
-                push esi
-                push NULL
-                push ebx
-                call [RegGetValueA]
-                test eax, eax
-                pop eax
-                clc
-                jz @f
-                stc
-@@:             pop ecx
-                retn
-
-.getDword:      push 4
-                push esp
-                push edi
-                push 0
-                push RRF_RT_REG_DWORD
-                push esi
-                push NULL
-                push ebx
-                call [RegGetValueA]
-                test eax, eax
-                pop eax
-                clc
-                jz @f
-                stc
-@@:             lea edi, [edi + 4]
-                retn
-
-;--------------------------------------------------------------------------;
-
-.setGuid39:     push 0  ; without braces
-                jmp @f
-.setGuid:       push 1  ; with braces
-@@:             ;virtual at esp
-                ;  .szGuid db 39 dup (?)
-                ;  .pad0   db ?
-                ;  .allocaSize = $ - $$
-                ;end virtual
-                sub esp, .allocaSize
-
-                push esp
-                push edi
-                call GuidToString
-
-                mov edx, esp
-                add edx, [esp + .allocaSize]
-                sub eax, edx
-                lea ecx, [39+2*eax]
-                mov byte [esp+ecx], 0
-
-                push ecx
-                push edx
-                push REG_SZ
-                push 0
-                push esi
-                push ebx
-                call [RegSetValueExA]
-                test eax, eax
-                clc
-                jz @f
-                stc
-@@:
-                lea edi, [edi + 16]
-                lea esp, [esp + .allocaSize + 4]
-                retn
-
-.setSz:         push ecx
-                mov eax, ecx            ; store max length to eax
-                xor ecx, ecx
-@@:             cmp byte [edi+ecx], 0   ; calculate real length
-                lea ecx, [ecx+1]
-                jnz @b
-
-                push ecx
-                push edi
-                add edi, eax
-                push REG_SZ
-                push 0
-                push esi
-                push ebx
-                call [RegSetValueExA]
-                test eax, eax
-                clc
-                jz @f
-                stc
-@@:             pop ecx
-                retn
-
-.setDword:      push 4
-                push edi
-                push REG_DWORD
-                push 0
-                push esi
-                push ebx
-                call [RegSetValueExA]
-                add edi, 4
-                test eax, eax
-                clc
-                jz @f
-                stc
-@@:             retn

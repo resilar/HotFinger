@@ -33,10 +33,9 @@ ends
 
 SEE_MASK_NOCLOSEPROCESS = 00000040h
 
-; guidDatabaseId[16]:BYTE pUnits[dwCount]:WINBIO_UNIT_SCHEMA
-;proc SensorDialog guidDatabaseId:DWORD pUnits:DWORD, dwCount:DWORD
-SensorSelect:
-SensorInstallDialog:
+; pUnits[dwCount]:WINBIO_UNIT_SCHEMA
+;proc SensorSelectDialog pUnits:DWORD, dwCount:DWORD
+SensorSelectDialog:
                 push ebp
                 mov ebp, esp
                 sub esp, .allocaSize
@@ -45,7 +44,6 @@ SensorInstallDialog:
                   .allocaSize = $ - $$
                   .ebp      dd ?
                   .retAddr  dd ?
-                  .guidDB   dd ?
                   .pUnits   dd ?
                   .dwCount  dd ?
                 end virtual

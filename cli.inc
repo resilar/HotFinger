@@ -8,7 +8,6 @@ proc CommandLineInterface
 
                 ; Debugging ...
                 ;call @f
-                ;du '"C:\Users\Hitler\Desktop\HotFinger\hotfinger.exe" install',0
                 ;du '"C:\Users\Hitler\Desktop\HotFinger\hotfinger.exe" install USB\VID_1488&PID_1488\222222222222',0
                 ;du '"C:\Users\Hitler\Desktop\HotFinger\hotfinger.exe" uninstall',0
                 ;@@: pop eax
@@ -28,25 +27,13 @@ proc CommandLineInterface
 
                 cmp cl, 2
                 jnz .three_args
-                push eax
-                push dword [eax + 4]
-                push clidata.wszInstall
-                call [lstrcmpW]
-                test eax, eax
-                pop eax
-                jz .install
                 push dword [eax + 4]
                 push clidata.wszUninstall
                 call [lstrcmpW]
                 test eax, eax
                 jnz .exit
-                push NULL
                 push guidDatabase
                 call UninstallDatabase
-                jmp .exit_process
-
-.install:       push guidDatabase
-                call InstallDatabase
                 jmp .exit_process
 
 .three_args:    cmp cl, 3

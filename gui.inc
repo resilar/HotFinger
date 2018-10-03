@@ -1131,7 +1131,13 @@ endp
 ; - SaveSettings
 ;-------------------------------------------------------------------------;
 CalculateWindowPositions:
-                push [ebx + CONTEXT.dwDPI]
+                mov eax, [ebx + CONTEXT.dwDPI]
+                test eax, eax
+                jnz @f
+                call [GetDpiForSystem]
+                mov [ebx + CONTEXT.dwDPI], eax
+
+@@:             push eax;[ebx + CONTEXT.dwDPI]
                 push 96
                 push [ebx + CONTEXT.win.pos.cy]
                 call [MulDiv]

@@ -59,6 +59,7 @@ entry $
 ; WinMain
 ;-------------------------------------------------------------------------;
 proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
+                local wszDeviceInstanceId[WINBIO_MAX_STRING_LEN]:WORD
                 local ini:SETTINGS
                 local wc:WNDCLASSEX
                 local msg:MSG
@@ -96,6 +97,11 @@ proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
                 push ebx
                 call ReadAppDataSettings
 
+                lea eax, [wszDeviceInstanceId]
+                push eax
+                push guidDatabase
+                call GetDatabaseSensorDeviceInstanceId
+
                 ; Get sensor (validate the one read from settings)
                 ; TODO: Move this to settings.inc or somewhere else
 .retry:         lea eax, [dwCount]
@@ -118,58 +124,52 @@ proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
                 call [MessageBoxA]
                 jmp .die
 
-.enumerated:    lea ecx, [eax-1]
-                lea esi, [ebx + SETTINGS.dev.wszDeviceInstanceId]
-                mov edi, esi
-                repnz scasw
-                xor ecx, -1
-
-                mov eax, [pUnits]
+.enumerated:    mov eax, [pUnits]
                 xor edx, edx
 .sensor_loop:   cmp edx, [dwCount]
                 jae .select_sensor
 
                 lea edi, [eax + WINBIO_UNIT_SCHEMA.wszDeviceInstanceId]
-                push ecx
-                push esi
-                rep cmpsw
-                pop esi
-                pop ecx
-                jnz .next_sensor
 
-                call .check_sensor
-                jnz .found_sensor
+                push eax
+                push edx
+                lea eax, [wszDeviceInstanceId]
+                push eax
+                push edi
+                call [lstrcmpiW]
+                test eax, eax
+                pop edx
+                pop eax
+                jz .found_sensor
 
-.next_sensor:   add eax, sizeof.WINBIO_UNIT_SCHEMA
+                add eax, sizeof.WINBIO_UNIT_SCHEMA
                 inc edx
                 jmp .sensor_loop
 
-                ; Input = wszDeviceInstanceId (esi)
-.check_sensor:  push eax
-                push edx
-                push guidDatabase
-                push esi
-                call FindPrivateSensorKeyForDatabase
-                test eax, eax
-                jz @f
-                pushf
-                push eax
-                call [RegCloseKey]
-                popf
-@@:             pop edx
-                pop eax
-                retn
-
 .select_sensor: push [dwCount]
                 push [pUnits]
-                push guidDatabase
-                call SensorSelect
+                call SensorSelectDialog
                 test eax, eax
-                jz @f
+                jz .select_fail
                 lea esi, [eax + WINBIO_UNIT_SCHEMA.wszDeviceInstanceId]
-                call .check_sensor
-                jnz .found_sensor
-@@:             push [pUnits]
+                lea edi, [wszDeviceInstanceId]
+                push eax
+                push edi
+                push guidDatabase
+                call GetDatabaseSensorDeviceInstanceId
+                test eax, eax
+                pop eax
+                jz .select_fail
+
+                push eax
+                push esi
+                push edi
+                call [lstrcmpiW]
+                test eax, eax
+                pop eax
+                jz .found_sensor
+
+.select_fail:   push [pUnits]
                 call [WinBioFree]
                 jmp .die
 
@@ -342,8 +342,10 @@ section '.idata' import readable
          RegCreateKeyExA, 'RegCreateKeyExA', \
          RegDeleteKeyA, 'RegDeleteKeyA', \
          RegEnumKeyExA, 'RegEnumKeyExA', \
+         RegEnumKeyExW, 'RegEnumKeyExW', \
          RegGetValueA, 'RegGetValueA', \
          RegOpenKeyExA, 'RegOpenKeyExA', \
+         RegOpenKeyExW, 'RegOpenKeyExW', \
          RegSetValueExA, 'RegSetValueExA'
 
   import comctl32, \
@@ -382,6 +384,7 @@ section '.idata' import readable
          WaitForSingleObject, 'WaitForSingleObject', \
          WritePrivateProfileStringA, 'WritePrivateProfileStringA', \
          lstrcmpW, 'lstrcmpW', \
+         lstrcmpiW, 'lstrcmpiW', \
          lstrlenA, 'lstrlenA', \
          lstrlenW, 'lstrlenW'
 
@@ -504,7 +507,7 @@ IDC_STATIC_ICON = 3000
     db ' </dependency>',0dh,0ah
     db ' <asmv3:application>',0dh,0ah
     db '  <asmv3:windowsSettings xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">',0dh,0ah
-    ;db '   <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>',0dh,0ah
+;    db '   <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2</dpiAwareness>',0dh,0ah
     db '   <dpiAware>true</dpiAware>',0dh,0ah
     db '  </asmv3:windowsSettings>',0dh,0ah
     db ' </asmv3:application>',0dh,0ah

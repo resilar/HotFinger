@@ -24,6 +24,11 @@ database:
 .szFormatD db '%d',0
 
 .szDatabasesKey db 'SYSTEM\CurrentControlSet\Services\WbioSrvc\Databases',0
+.szDatabasesKey.strlen = ($-1) - .szDatabasesKey
+
+.szEnumKey      db 'SYSTEM\CurrentControlSet\Enum',0
+.szConfigsKey   db 'Device Parameters\WinBio\Configurations',0
+
 .szSensorKeyFmt db 'SYSTEM\CurrentControlSet\Enum\'
                 db '%ls'
                 db '\Device Parameters\WinBio\Configurations',0
@@ -45,12 +50,6 @@ database:
 .szFilePath         db 'FilePath',0
 .szFormat           db 'Format',0
 .szInitialSize      db 'InitialSize',0
-
-; Messages
-.szSensorError          db 'Sensor registration failed.',0
-.szRegistryAccessDenied db 'Cannot write to HKEY_LOCAL_MACHINE.',0dh,0ah
-                        db 'Try running the program as administrator.',0
-.szExistingDatabaseKey  db 'Database registry key already exists.',0
 
 ;-------------------------------------------------------------------------;
 ; gui.inc
@@ -188,26 +187,26 @@ utils:
 align 2
 .wszRunAs           du 'runas',0
 
-; ASCII digit to integer value table
+; ASCII digit to integer value table (80h indicates bad digit)
 align 16
 .asciiDigitValueTable:
 ;  x0h x1h x2h x3h x4h x5h x6h x7h  x8h x9h xAh xBh xCh xDh xEh xFh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; 0xh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; 1xh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; 2xh
-db 00h,01h,02h,03h,04h,05h,06h,07h, 08h,09h,00h,00h,00h,00h,00h,00h ; 3xh
-db 00h,0Ah,0Bh,0Ch,0Dh,0Eh,0Fh,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; 4xh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; 5xh
-db 00h,0Ah,0Bh,0Ch,0Dh,0Eh,0Fh,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; 6xh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; 7xh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; 8xh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; 9xh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; Axh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; Bxh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; Cxh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; Dxh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; Exh
-db 00h,00h,00h,00h,00h,00h,00h,00h, 00h,00h,00h,00h,00h,00h,00h,00h ; Fxh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; 0xh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; 1xh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; 2xh
+db 00h,01h,02h,03h,04h,05h,06h,07h, 08h,09h,80h,80h,80h,80h,80h,80h ; 3xh
+db 80h,0Ah,0Bh,0Ch,0Dh,0Eh,0Fh,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; 4xh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; 5xh
+db 80h,0Ah,0Bh,0Ch,0Dh,0Eh,0Fh,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; 6xh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; 7xh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; 8xh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; 9xh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; Axh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; Bxh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; Cxh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; Dxh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; Exh
+db 80h,80h,80h,80h,80h,80h,80h,80h, 80h,80h,80h,80h,80h,80h,80h,80h ; Fxh
 
 ; Subfactor names
 .szUnknown       db 'Unknown',0

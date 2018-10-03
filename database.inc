@@ -1,12 +1,5 @@
 ;-------------------------------------------------------------------------;
 ; WinBio database management functions
-;
-; The code is shitty. The management of WinBio sensor configurations and
-; fingerprint databases should be decoupled properly. Moreover, the code
-; currently enumerates biometric units & databases using WinBio API, which
-; is incorrect in some situations (e.g., uninstalling database of detached
-; sensor does not clear the sensor configuration in registry). Enumeration
-; using registry instead of WinBio API would be less inane.
 ;-------------------------------------------------------------------------;
 
 KEY_WOW64_64KEY = 0100h
@@ -17,7 +10,7 @@ RRF_RT_REG_DWORD = 10h
 
 ERROR_ACCESS_DENIED = 5
 
-RPC_S_SERVER_TOO_BUSY = 000006BBh
+RPC_S_SERVER_TOO_BUSY    = 000006BBh
 RPC_X_SS_IN_NULL_CONTEXT = 000006EFh
 
 struct WBIOSVC_SENSOR
@@ -27,9 +20,6 @@ struct WBIOSVC_SENSOR
   szEngineAdapterBinary  db MAX_PATH dup (?)
   szSensorAdapterBinary  db MAX_PATH dup (?)
   szStorageAdapterBinary db MAX_PATH dup (?)
-
-  ; non-registry fields
-  wszDeviceInstanceId    du WINBIO_MAX_STRING_LEN dup (?)
 ends
 
 struct WBIOSVC_DATABASE
@@ -41,9 +31,6 @@ struct WBIOSVC_DATABASE
   szFilePath         db MAX_PATH dup (?)
   guidFormat         db 16 dup (?)
   dwInitialSize      dd ?
-
-  ; non-registry fields
-  guidDatabaseId    db 16 dup (?)
 ends
 
 ; pSensor:WBIOSVC_SENSOR
@@ -141,447 +128,6 @@ proc ReadWbiosvcDatabaseKey hKey:DWORD, pDatabase:DWORD
                 ret
 .error:         xor eax, eax
                 jmp .finish
-endp
-
-; guidDatabaseId[16]:BYTE
-; fnFilter = proc hKey:DWORD, guidDatabaseId:DWORD, pUser:DWORD
-proc IterSensorKeys wszDeviceInstanceId:DWORD, \
-                    fnFilter:DWORD, pUser:DWORD, \
-                    bCreate:DWORD, bDelete:DWORD
-                local szKey[65+WINBIO_MAX_STRING_LEN+1+255+1]:BYTE
-                local pad0[2]:BYTE
-                local buffer[39]:BYTE
-                local pad1[1]:BYTE
-                local dwNewMax:DWORD
-                local hParentKey:DWORD
-                local hKey:DWORD
-
-                push ebx
-                push esi
-                push edi
-                xor eax, eax
-                mov [hKey], eax
-                mov [dwNewMax], eax
-
-                lea esi, [szKey]
-                lea edi, [buffer]
-                push [wszDeviceInstanceId]
-                push database.szSensorKeyFmt
-                push esi
-                call [wsprintfA]
-                add esp, 0ch
-
-                lea edx, [hParentKey]
-                push edx
-                push KEY_READ + KEY_WOW64_32KEY
-                cmp [bDelete], 0
-                jz @f
-                or dword [esp], KEY_SET_VALUE
-@@:             push 0
-                push esi
-                add esi, eax
-                push HKEY_LOCAL_MACHINE
-                call [RegOpenKeyExA]
-                test eax, eax
-                jnz .exit
-
-                mov byte [esi], '\'
-                inc esi
-                xor ebx, ebx    ; subkey index
-.enumerate:     xor eax, eax
-                push 256
-                mov edx, esp
-                push eax
-                push eax
-                push eax
-                push eax
-                push edx
-                push esi
-                push ebx
-                push [hParentKey]
-                call [RegEnumKeyExA]
-                inc ebx
-                pop ecx
-                test eax, eax
-                jnz .not_found
-
-                ; Is numeric?
-                xor edx, edx
-@@:             cmp byte [esi+edx], '0'
-                jb .enumerate
-                cmp byte [esi+edx], '9'
-                ja .enumerate
-                inc edx
-                loop @b
-.numeric:
-                call atoi
-                cmp eax, [dwNewMax]
-                jb @f
-                inc eax
-                mov [dwNewMax], eax
-@@:
-                lea edx, [hKey]
-                push edx
-                push KEY_READ + KEY_WOW64_32KEY
-                push 0
-                push esi
-                push [hParentKey]
-                call [RegOpenKeyExA]
-                test eax, eax
-                jnz .enumerate
-
-                push 39
-                push esp
-                push edi
-                push NULL
-                push RRF_RT_REG_SZ
-                push database.szDatabaseId
-                push NULL
-                push [hKey]
-                call [RegGetValueA]
-                test eax, eax
-                pop eax
-                jnz .bad_key
-                cmp al, 37
-                jz @f
-                cmp al, 39
-                jnz .bad_key
-@@:
-                ; Save database GUID to pDatabase if given
-                push edi
-                push edi
-                call StringToGuid
-
-                pushad
-                push [pUser]
-                push edi
-                push [hKey]
-                mov eax, [fnFilter]
-                call eax
-                test eax, eax
-                popad
-                jnz .match
-
-.bad_key:       push [hKey]
-                call [RegCloseKey]
-                jmp .enumerate
-
-.match:         cmp [bDelete], 0
-                jz @f
-
-                push [hKey]
-                call [RegCloseKey]
-                push esi
-                push [hParentKey]
-                call [RegDeleteKeyA]
-                jmp .enumerate
-
-@@:             cmp [bCreate], 0
-                jz .close
-.collision:     push 0
-                push [hKey]
-                call [RegCloseKey]
-                pop [hKey]
-                jmp .close
-
-.not_found:     xor eax, eax
-                mov [hKey], eax
-                cmp [bCreate], eax
-                jz .close
-
-                lea edi, [szKey]
-                push [dwNewMax]
-                push database.szFormatD
-                push edi
-                call [wsprintfA]
-                add esp, 0ch
-
-                mov eax, [hParentKey]
-                push NULL
-                lea ecx, [hKey]
-                push ecx
-                push NULL
-                push KEY_WRITE
-                push 0
-                push NULL
-                push 0
-                lea edi, [szKey]
-                push edi
-                push eax
-                call [RegCreateKeyExA]
-
-.close:         push [hParentKey]
-                call [RegCloseKey]
-.exit:          mov eax, [hKey]
-                pop edi
-                pop esi
-                pop ebx
-                ret
-endp
-
-;-------------------------------------------------------------------------;
-; Read *system* sensor registry settings of the specified device instance.
-; Output: pSensor:WBIOSVC_SENSOR, pDatabase:WBIOSVC_DATABASE
-;-------------------------------------------------------------------------;
-proc ReadWbiosvcSettings wszDeviceInstanceId:DWORD, pSensor:DWORD, pDatabase:DWORD
-                local szKey[65+WINBIO_MAX_STRING_LEN+1+255+1]:BYTE
-                local pad0[2]:BYTE
-                local buffer[39]:BYTE
-                local pad1[1]:BYTE
-                local pStorages:DWORD
-                local dwCount:DWORD
-                local dwIndex:DWORD
-                local hParentKey:DWORD
-                local hKey:DWORD
-
-                push ebx
-                push esi
-                push edi
-                push 1 ; return value
-
-.retry:         lea ecx, [dwCount]
-                lea eax, [pStorages]
-                push ecx
-                push eax
-                push WINBIO_TYPE_FINGERPRINT
-                call [WinBioEnumDatabases]
-                cmp eax, RPC_S_SERVER_TOO_BUSY
-                jz .retry
-                test eax, eax
-                jnz .exit
-
-                ; Closures in x86 assembly, deal with it 8)
-                push FALSE
-                push FALSE
-                push ebp ; user data
-                call .filter_end
-;-------------------------------------------------------------------------;
-                virtual at esp
-                  .ebp     dd ?
-                  .retAddr dd ?
-                  .hKey    dd ?
-                  .guidDB  dd ?
-                  .user    dd ?
-                end virtual
-                push ebp
-                mov ebp, [.user]
-
-                ; We need a system sensor ...
-                lea edi, [buffer]
-                mov eax, [.hKey]
-                push 4
-                push esp
-                push edi
-                push 0
-                push RRF_RT_REG_DWORD
-                push database.szSystemSensor
-                push NULL
-                push eax
-                call [RegGetValueA]
-                pop ecx
-                test eax, eax
-                jnz .bad_key
-                scasd
-                jz .bad_key
-
-                ; ... that supports fingerprint storage
-                mov [dwIndex], eax
-                mov eax, [pStorages]
-                mov edx, [dwCount]
-.next_storage:  cmp [dwIndex], edx
-                jz .bad_key
-
-                mov cl, 16
-                lea esi, [eax + WINBIO_STORAGE_SCHEMA.guidDatabaseId]
-                mov edi, [.guidDB]
-                repz cmpsb
-                jz .match
-                lea eax, [eax + sizeof.WINBIO_STORAGE_SCHEMA]
-                inc [dwIndex]
-                jmp .next_storage
-
-.bad_key:       xor eax, eax
-.match:         pop ebp
-                retn 0ch
-.filter_end:
-;-------------------------------------------------------------------------;
-                push [wszDeviceInstanceId]
-                call IterSensorKeys
-                test eax, eax
-                jz .fail
-                mov [hKey], eax
-                imul edi, [dwIndex], sizeof.WINBIO_STORAGE_SCHEMA
-                add edi, [pStorages]
-
-                ; Read wbiosvc sensor device configuration
-                xor ebx, ebx
-                mov esi, [pSensor]
-                test esi, esi
-                push eax ; for RegCloseKey (either branch)
-                jnz .read_sensor
-                call [RegCloseKey]
-                jmp .read_database
-.read_sensor:   push esi
-                push eax
-                call ReadWbiosvcSensorKey
-                mov ebx, eax
-                call [RegCloseKey]
-                dec ebx
-                jnz .finish
-                push edi
-                lea edi, [esi + WBIOSVC_SENSOR.wszDeviceInstanceId]
-                mov esi, [wszDeviceInstanceId]
-@@:             cmp [esi], bx
-                movsw
-                jnz @b
-                pop edi
-
-                ; Read wbiosvc database configuration
-.read_database: add ebx, [pDatabase]
-                jz .finish
-
-                lea eax, [szKey]
-                lea esi, [edi + WINBIO_STORAGE_SCHEMA.guidDatabaseId]
-                lea edi, [ebx + WBIOSVC_DATABASE.guidDatabaseId]
-                push eax
-                push edi
-                movsd ; copy
-                movsd ; a
-                movsd ; 16-byte
-                movsd ; GUID
-                call DatabaseKey
-
-                lea esi, [hKey]
-                push esi
-                push KEY_READ + KEY_WOW64_32KEY
-                push 0
-                push eax
-                push HKEY_LOCAL_MACHINE
-                call [RegOpenKeyExA]
-                test eax, eax
-                jnz .finish
-
-                push ebx
-                push dword [esi]
-                call ReadWbiosvcDatabaseKey
-                dec eax
-                pushfd
-                push dword [esi]
-                call [RegCloseKey]
-                popfd
-
-.finish:        ; Adjust the return value based on ZF
-                pop eax
-                setnz al
-                push eax
-
-.fail:          push [pStorages]
-                call [WinBioFree]
-.exit:          pop eax
-                pop edi
-                pop esi
-                pop ebx
-                ret
-endp
-
-;-------------------------------------------------------------------------;
-; Find non-system sensor for given device and database.
-; Output: wszDeviceInstanceId[256]:WORD guidDatabaseId[16]:BYTE
-; Output: hKey (eax)
-;-------------------------------------------------------------------------;
-proc FindPrivateSensorKeyForDatabase wszDeviceInstanceId:DWORD, guidDatabaseId:DWORD
-                local dwBuffer:DWORD
-                local pStorages:DWORD
-                local dwCount:DWORD
-
-                push esi
-                push edi
-
-.retry:         lea ecx, [dwCount]
-                lea eax, [pStorages]
-                push ecx
-                push eax
-                push WINBIO_TYPE_FINGERPRINT
-                call [WinBioEnumDatabases]
-                cmp eax, RPC_S_SERVER_TOO_BUSY
-                jz .retry
-                test eax, eax
-                xor eax, eax
-                jnz .exit
-
-                push FALSE
-                push FALSE
-                push ebp ; user data
-                call .filter_end
-;-------------------------------------------------------------------------;
-                virtual at esp
-                  .ebp     dd ?
-                  .retAddr dd ?
-                  .hKey    dd ?
-                  .guidDB  dd ?
-                  .user    dd ?
-                end virtual
-                push ebp
-                mov ebp, [.user]
-
-                ; We need a non-system sensor ...
-                lea edi, [dwBuffer]
-                mov eax, [.hKey]
-                push 4
-                push esp
-                push edi
-                push 0
-                push RRF_RT_REG_DWORD
-                push database.szSystemSensor
-                push NULL
-                push eax
-                call [RegGetValueA]
-                test eax, eax
-                pop ecx
-                jnz .bad_key
-                scasd
-                jnz .bad_key
-
-                ; ... for our database
-                mov eax, [pStorages]
-                mov edx, [dwCount]
-.next_storage:  dec edx
-                js .bad_key
-
-                mov cl, 16
-                lea esi, [eax + WINBIO_STORAGE_SCHEMA.guidDatabaseId]
-                mov edi, [.guidDB]
-                push edi
-                push [guidDatabaseId]
-                push ecx
-                repz cmpsb
-                pop ecx
-                pop esi
-                pop edi
-                jnz .mismatch
-
-                repz cmpsb
-                jz .match
-
-.mismatch:      lea eax, [eax + sizeof.WINBIO_STORAGE_SCHEMA]
-                jmp .next_storage
-
-.bad_key:       xor eax, eax
-.match:         pop ebp
-                retn 0ch
-.filter_end:
-;-------------------------------------------------------------------------;
-                push [wszDeviceInstanceId]
-                call IterSensorKeys
-
-                push eax
-                push [pStorages]
-                call [WinBioFree]
-                pop eax
-
-.exit:          pop edi
-                pop esi
-                ret
 endp
 
 ; pSensor:WBIOSVC_SENSOR
@@ -684,117 +230,291 @@ proc SaveWbiosvcDatabaseKey hKey:DWORD, pDatabase:DWORD
 endp
 
 ;-------------------------------------------------------------------------;
-; Save WinBio service registry settings.
-; pSensor:WBIOSVC_SENSOR, pDatabase:WBIOSVC_DATABASE
+; Iterate WinBio sensor configuration keys for (all) device instances.
+;
+;   HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Enum\<DeviceInstanceId>
+;                     \Device Parameters\WinBio\Configurations\<Id>
+;
+; wszDeviceInstanceId[WINBIO_MAX_STRING_LEN]:WORD (iter all if NULL)
+; fnFilter = proc hKey:DWORD, wszDeviceInstanceId:DWORD, dwConfigId:DWORD, pUser:DWORD
+;
+; If fnFilter returns ...
+; * eax = -2, then delete hKey and stop iteration and return NÚLL.
+; * eax = -1, then delete hKey and iterate to the next key.
+; * eax =  0, then close hKey and iterate to the next key.
+; * eax =  1, then stop iteration and return hKey.
 ;-------------------------------------------------------------------------;
-proc SaveWbiosvcSettings pSensor:DWORD, pDatabase:DWORD
-                local szKey[65+WINBIO_MAX_STRING_LEN+1+255+1]:BYTE
-                local pad0[2]:BYTE
-                local hParentKey:DWORD
-                local hKey:DWORD
+proc IterSensorConfigurations pwszDeviceInstanceId:DWORD, fnFilter:DWORD, pUser:DWORD
+                local szKey[65+WINBIO_MAX_STRING_LEN+1+255+1 + 2]:BYTE
+                local szConfigId[32]:BYTE
+                local wszDeviceInstanceId[WINBIO_MAX_STRING_LEN+2]:WORD
+                local dwConfigId:DWORD
+                local hConfigurationsKey:DWORD
+                local dwConfigurationsKeyWritable:DWORD
+                local dwConfigurationIdx:DWORD
+                local hConfigurationKey:DWORD
+                local dwInstanceLen:DWORD
+                local dwInstanceIdx:DWORD
+                local hInstanceKey:DWORD
+                local hDeviceKey:DWORD
+                local dwDeviceLen:DWORD
+                local dwDeviceIdx:DWORD
+                local hDevicesKey:DWORD
+                local dwEnumLen:DWORD
+                local dwEnumIdx:DWORD
+                local hEnumKey:DWORD
 
                 xor eax, eax
                 push esi
                 push edi
-                push eax ; return value (= 0)
-                mov [hParentKey], eax
+                push eax ; return value
 
-.save_database: mov edi, [pDatabase]
-                test edi, edi
-                jz .save_sensor
+                cmp [pwszDeviceInstanceId], eax
+                jz .iter_all
 
-                lea esi, [hParentKey]
+                mov esi, [pwszDeviceInstanceId]
                 push esi
-                push KEY_WRITE
+                call [lstrlenW]
+                test eax, eax
+                lea ecx, [eax+1]
+                jz .exit
+                cmp eax, WINBIO_MAX_STRING_LEN
+                ja .exit
+                lea edi, [wszDeviceInstanceId]
+                lea eax, [szKey]
+                push edi
+                push database.szSensorKeyFmt
+                push eax
+                rep movsw
+                call [wsprintfA]
+                add esp, 0ch
+
+                lea eax, [hConfigurationsKey]
+                push eax
+                push KEY_READ + KEY_WOW64_32KEY + KEY_SET_VALUE
                 push 0
-                push database.szDatabasesKey
+                lea eax, [szKey]
+                push eax
                 push HKEY_LOCAL_MACHINE
                 call [RegOpenKeyExA]
-                cmp eax, ERROR_ACCESS_DENIED
-                jz .access_denied
                 test eax, eax
-                jnz .save_sensor
-                mov esi, [esi]
+                jnz .exit
+                jmp .configs_loop
 
-                push 1
-                push esp
-                lea eax, [hKey]
+.iter_all:      lea eax, [hEnumKey]
                 push eax
-                push NULL
-                push KEY_WRITE
+                push KEY_READ + KEY_WOW64_32KEY
                 push 0
-                push NULL
+                push database.szEnumKey
+                push HKEY_LOCAL_MACHINE
+                call [RegOpenKeyExA]
+                test eax, eax
+                jnz .enum_end
+
+                mov [dwEnumIdx], 0
+.enum_iter:     xor eax, eax
+                push eax
+                push eax
+                push eax
+                push eax
+                lea eax, [dwEnumLen]
+                mov dword [eax], WINBIO_MAX_STRING_LEN
+                push eax
+                lea eax, [wszDeviceInstanceId]
+                push eax
+                push [dwEnumIdx]
+                inc [dwEnumIdx]
+                push [hEnumKey]
+                call [RegEnumKeyExW]
+                test eax, eax
+                jnz .enum_end
+
+                lea eax, [hDevicesKey]
+                push eax
+                push KEY_READ + KEY_WOW64_32KEY
                 push 0
-                lea edx, [szKey]
-                push edx
-                push esi
+                lea eax, [wszDeviceInstanceId]
+                push eax
+                push [hEnumKey]
+                call [RegOpenKeyExW]
+                test eax, eax
+                jnz .enum_iter
 
-                lea ecx, [edi + WBIOSVC_DATABASE.guidDatabaseId]
-                push edx
-                push ecx
-                call GuidToString
-
-                call [RegCreateKeyExA]
-                push esi
-                mov esi, eax
-                call [RegCloseKey]
-                test esi, esi
-                pop eax
-                jnz .access_denied
-                dec eax                 ; REG_CREATED_NEW_KEY (01h)
-                jz .key_created
-                dec eax                 ; REG_OPENED_EXISTING_KEY (02h)
-                jz .existing_key
-                jmp .access_denied      ; Unknown disposition
-
-.key_created:   mov eax, [hKey]
-                push eax ; RegCloseKey
+                mov [dwDeviceIdx], 0
+.devices_iter:  xor eax, eax
+                push eax
+                push eax
+                push eax
+                push eax
+                lea eax, [dwDeviceLen]
+                mov ecx, [dwEnumLen]
+                mov dword [eax], WINBIO_MAX_STRING_LEN
+                sub dword [eax], ecx
+                push eax
+                mov ax, '\'
+                lea edi, [wszDeviceInstanceId + ecx*2]
+                stosw
                 push edi
+                push [dwDeviceIdx]
+                inc [dwDeviceIdx]
+                push [hDevicesKey]
+                call [RegEnumKeyExW]
+                test eax, eax
+                jnz .devices_end
+                lea eax, [hDeviceKey]
                 push eax
-                call SaveWbiosvcDatabaseKey
-                mov [esp+4], eax
+                push KEY_READ + KEY_WOW64_32KEY
+                push 0
+                push edi
+                push [hDevicesKey]
+                call [RegOpenKeyExW]
+                test eax, eax
+                jnz .devices_iter
+
+                mov [dwInstanceIdx], eax
+.insts_iter:    xor eax, eax
+                push eax
+                push eax
+                push eax
+                push eax
+                lea eax, [dwInstanceLen]
+                mov ecx, [dwEnumLen]
+                add ecx, [dwDeviceLen]
+                inc ecx
+                mov dword [eax], WINBIO_MAX_STRING_LEN
+                sub dword [eax], ecx
+                push eax
+                mov ax, '\'
+                lea edi, [wszDeviceInstanceId + ecx*2]
+                stosw
+                push edi
+                push [dwInstanceIdx]
+                inc [dwInstanceIdx]
+                push [hDeviceKey]
+                call [RegEnumKeyExW]
+                test eax, eax
+                jnz .insts_end
+                lea eax, [hInstanceKey]
+                push eax
+                push KEY_READ + KEY_WOW64_32KEY
+                push 0
+                push edi
+                push [hDeviceKey]
+                call [RegOpenKeyExW]
+                test eax, eax
+                jnz .devices_next
+
+                lea eax, [hConfigurationsKey]
+                push eax
+                push KEY_READ + KEY_WOW64_32KEY
+                push 0
+                push database.szConfigsKey
+                push [hInstanceKey]
+                call [RegOpenKeyExA]
+                test eax, eax
+                jnz .insts_next
+
+                ; Check configurations of device instance
+.configs_loop:  mov [dwConfigurationsKeyWritable], eax
+                mov [dwConfigurationIdx], eax
+.configs_iter:  xor eax, eax
+                push 32
+                mov ecx, esp
+                push eax
+                push eax
+                push eax
+                push eax
+                push ecx
+                lea esi, [szConfigId]
+                push esi
+                push [dwConfigurationIdx]
+                inc [dwConfigurationIdx]
+                push [hConfigurationsKey]
+                call [RegEnumKeyExA]
+                test eax, eax
+                pop ecx
+                jnz .configs_end
+                mov byte [esi+ecx], 0
+
+                ; Is numeric?
+                xor edx, edx
+@@:             cmp byte [esi+edx], '0'
+                jb .configs_iter
+                cmp byte [esi+edx], '9'
+                ja .configs_iter
+                inc edx
+                loop @b
+                call atoi
+                mov [dwConfigId], eax
+
+                lea eax, [hConfigurationKey]
+                push eax
+                push KEY_READ + KEY_WOW64_32KEY
+                push 0
+                push esi
+                push [hConfigurationsKey]
+                call [RegOpenKeyExA]
+                test eax, eax
+                jnz .configs_iter
+
+                ; Finally, call the callback
+                push [pUser]
+                push [dwConfigId]
+                lea eax, [wszDeviceInstanceId]
+                push eax
+                push [hConfigurationKey]
+                call [fnFilter]
+
+                test eax, eax
+                jns .no_delete
+.delete:        pushf
+                push [hConfigurationKey]
                 call [RegCloseKey]
-                cmp byte [esp], 0
+                call .delete_hkey
+                popf
+                jnp .cleanup
+                test eax, eax
+                jnz .configs_iter
+                jmp .cleanup
+.no_delete:     jz .configs_next
+                mov eax, [hConfigurationKey]
+                mov dword [esp], eax
+                jmp .cleanup
+
+.configs_next:  push [hConfigurationKey]
+                call [RegCloseKey]
+                jmp .configs_iter
+
+.configs_end:   push [hConfigurationsKey]
+                call [RegCloseKey]
+                cmp [pwszDeviceInstanceId], 0
                 jnz .exit
 
-.save_sensor:   mov edi, [pSensor]
-                test edi, edi
-                jz .exit
+.insts_next:    push [hInstanceKey]
+                call [RegCloseKey]
+                jmp .insts_iter
+.insts_end:
+.devices_next:  push [hDeviceKey]
+                call [RegCloseKey]
+                jmp .devices_iter
+.devices_end:   push [hDevicesKey]
+                call [RegCloseKey]
+                jmp .enum_iter
 
-                lea eax, [edi + WBIOSVC_SENSOR.guidDatabaseId]
-                push FALSE
-                push TRUE
-                push eax
-                call .filter_end
-;-------------------------------------------------------------------------;
-                virtual at esp
-                  .retAddr dd ?
-                  .hKey    dd ?
-                  .guidDB  dd ?
-                  .user    dd ?
-                end virtual
-                push 16
-                pop ecx
-                mov esi, [.user]
-                mov edi, [.guidDB]
-                xor eax, eax
-                repz cmpsb
-                jnz @f
-                inc eax
-@@:             retn 0ch
-.filter_end:
-;-------------------------------------------------------------------------;
-                lea eax, [edi + WBIOSVC_SENSOR.wszDeviceInstanceId]
-                push eax
-                call IterSensorKeys
-                test eax, eax
-                jz .sensor_error
-                push eax ; RegCloseKey
+.cleanup:       push [hConfigurationsKey]
+                call [RegCloseKey]
+                cmp [pwszDeviceInstanceId], 0
+                jnz .exit
 
-                push edi
-                push eax
-                call SaveWbiosvcSensorKey
-                or [esp+4], eax
+                push [hInstanceKey]
+                call [RegCloseKey]
+                push [hDeviceKey]
+                call [RegCloseKey]
+
+                push [hDevicesKey]
+                call [RegCloseKey]
+
+.enum_end:      push [hEnumKey]
                 call [RegCloseKey]
 
 .exit:          pop eax
@@ -802,104 +522,218 @@ proc SaveWbiosvcSettings pSensor:DWORD, pDatabase:DWORD
                 pop esi
                 ret
 
-.access_denied: mov eax, database.szRegistryAccessDenied
-                jmp .error_message
-.sensor_error:  mov eax, database.szSensorError
-                jmp .error_message
-.existing_key:  mov eax, database.szExistingDatabaseKey
-.error_message: push MB_ICONEXCLAMATION
-                push gui.szError
+.delete_hkey:   cmp [dwConfigurationsKeyWritable], 0
+                jnz .writable_hkey
+
+                lea eax, [wszDeviceInstanceId]
                 push eax
+                push database.szSensorKeyFmt
+                lea eax, [szKey]
+                push eax
+                call [wsprintfA]
+                add esp, 0ch
+
+                lea eax, [hConfigurationsKey]
+                push eax
+                push dword [eax]
+                call [RegCloseKey]
+                push KEY_READ + KEY_WOW64_32KEY + KEY_SET_VALUE
                 push 0
-                call [MessageBoxA]
-                mov byte [esp], 1
-                jmp .exit
-endp
-
-; out[92]:BYTE
-proc DatabaseKey guid:DWORD, szOut:DWORD
-                push esi
-                push edi
-                mov edi, [szOut]
-                mov esi, database.szDatabasesKey
-                push edi ; return value
-@@:             lodsb
-                test al, al
-                jz @f
-                stosb
-                jmp @b
-@@:             mov al, '\'
-                stosb
-                push edi
-                push [guid]
-                call GuidToString
-                pop eax
-                pop edi
-                pop esi
-                ret
-endp
-
-proc IsDatabaseInstalled guid:DWORD
-                local pStorages:DWORD
-                local dwCount:DWORD
-                push ebx
-                push esi
-                push edi
-
-                xor ebx, ebx
-.retry:         lea eax, [dwCount]
+                lea eax, [szKey]
                 push eax
-                lea esi, [pStorages]
-                push esi
-                push WINBIO_TYPE_FINGERPRINT
-                call [WinBioEnumDatabases]
-                cmp eax, RPC_S_SERVER_TOO_BUSY
-                jz .retry
+                push HKEY_LOCAL_MACHINE
+                call [RegOpenKeyExA]
                 test eax, eax
-                jnz .fail
+                jz .writable_hkey
+                xor eax, eax
+                retn
 
-                lodsd
-                push eax        ; for [WinBioFree]
-.next:          dec [dwCount]
-                js .fail_cleanly
-                push 16
-                mov esi, [guid]
-                lea edi, [eax + WINBIO_STORAGE_SCHEMA.guidDatabaseId]
-                add eax, sizeof.WINBIO_STORAGE_SCHEMA
-                pop ecx
-                repz cmpsb
-                jnz .next
-
-.match:         inc ebx
-.fail_cleanly:  call [WinBioFree]
-.fail:          mov eax, ebx
-                pop edi
-                pop esi
-                pop ebx
-                ret
+.writable_hkey: lea eax, [szConfigId]
+                push eax
+                push [hConfigurationsKey]
+                call [RegDeleteKeyA]
+                xor eax, eax
+                inc eax
+                mov [dwConfigurationsKeyWritable], eax
+                retn
 endp
 
 proc InstallDatabaseForSensor guid:DWORD, wszDeviceInstanceId:DWORD
-                local sensorConfig:WBIOSVC_SENSOR
-                local databaseConfig:WBIOSVC_DATABASE
+                local dwConfigId:DWORD
+                local dwFound:DWORD
+                local hSensorKey:DWORD
+                local hDatabaseKey:DWORD
+                local sensor:WBIOSVC_SENSOR
+                local database:WBIOSVC_DATABASE
+                local szSensorKey[65+WINBIO_MAX_STRING_LEN+1+255+1 + 2]:BYTE
+                local szDatabaseKey[91 + 1 + 2]:BYTE
 
+                push [guid]
+                call IsDatabaseInstalled
+                test eax, eax
+                jz @f
+                mov eax, WINBIO_E_DATABASE_ALREADY_EXISTS
+                ret
+
+@@:             mov [dwConfigId], eax
+                mov [dwFound], eax
+
+                ; Closures in x86 assembly, deal with it 8)
+                push ebp ; pUser
+                call .filter_end
+;-------------------------------------------------------------------------;
+                virtual at esp
+                  .hDbKey  dd ?
+                  .szDbKey db 91 + 1 + 2 dup (?)
+                  .allocaSize = $ - $$
+                  .edi     dd ?
+                  .ebp     dd ?
+                  .retAddr dd ?
+                  .hKey    dd ?
+                  .device  dd ?
+                  .config  dd ?
+                  .user    dd ?
+                end virtual
+
+                push ebp
+                push edi
+                sub esp, .allocaSize
+                mov ebp, [.user]
+                cmp [dwFound], 0
+                jnz .exit
+
+                ; Detemine configuration key (max + 1)
+                mov eax, [.config]
+                cmp eax, [dwConfigId]
+                jb @f
+                inc eax
+                mov [dwConfigId], eax
+@@:
+                ; We are interested only in system sensors ...
+                mov ecx, [.hKey]
+                push NULL
+                mov eax, esp
+                push 4
+                push esp
+                push eax
+                push 0
+                push RRF_RT_REG_DWORD
+                push database.szSystemSensor
+                push NULL
+                push ecx
+                call [RegGetValueA]
+                test eax, eax
+                pop ecx
+                pop eax
+                jnz .exit
+                cmp ecx, 4
+                jnz .exit
+                test eax, eax
+                jz .exit
+
+                ; ... that have fingerprint database
+                mov ecx, database.szDatabasesKey.strlen
+                mov esi, database.szDatabasesKey
+                lea edi, [.szDbKey]
+                rep movsb
+                mov ax, '\{'
+                stosw
+                lea eax, [edi-1]
+
+                mov ecx, [.hKey]
+                push 36+1
+                push esp
+                push edi
+                push 0
+                push RRF_RT_REG_SZ
+                push database.szDatabaseId
+                push NULL
+                push ecx
+                call [RegGetValueA]
+                test eax, eax
+                pop ecx
+                jnz .exit
+                cmp ecx, 36+1
+                jnz .exit
+                lea edi, [edi+ecx-1]
+                mov al, '}'
+                stosw
+
+                lea eax, [.hDbKey]
+                lea edi, [.szDbKey]
+                push eax
+                push KEY_READ + KEY_WOW64_32KEY
+                push 0
+                push edi
+                push HKEY_LOCAL_MACHINE
+                call [RegOpenKeyExA]
+                test eax, eax
+                jnz .exit
+
+                mov ecx, [.hDbKey]
+                push 0
+                mov eax, esp
+                push 4
+                push esp
+                push eax
+                push 0
+                push RRF_RT_REG_DWORD
+                push database.szBiometricType
+                push NULL
+                push ecx
+                call [RegGetValueA]
+                test eax, eax
+                pop ecx
+                pop eax
+                jnz .exit_cleanly
+                cmp ecx, 4
+                jnz .exit_cleanly
+                cmp eax, WINBIO_TYPE_FINGERPRINT
+                jnz .exit_cleanly
+
+                ; System fingerprint sensor found.
+                ; Read sensor & database configuration keys.
+                lea eax, [sensor]
+                push eax
+                push [.hKey + 4]
+                call ReadWbiosvcSensorKey
+                test eax, eax
+                jz .exit_cleanly
+                lea eax, [database]
+                push eax
+                push [.hDbKey + 4]
+                call ReadWbiosvcDatabaseKey
+                test eax, eax
+                jz .exit_cleanly
+
+                ; Done
+                mov [dwFound], 1
+
+.exit_cleanly:  push [.hDbKey]
+                call [RegCloseKey]
+.exit:          xor eax, eax
+                add esp, .allocaSize
+                pop edi
+                pop ebp
+                retn 10h
+;-------------------------------------------------------------------------;
+.filter_end:    push [wszDeviceInstanceId]
+                call IterSensorConfigurations
+
+                cmp [dwFound], 0
+                jnz .system_sensor_found
+                mov eax, WINBIO_E_INVALID_DEVICE_STATE
+                ret
+
+.system_sensor_found:
+                ; Adjust database & sensor configs for our private datbaase
+                xor eax, eax
                 push ebx
                 push esi
                 push edi
-
-                lea ebx, [databaseConfig]
-                lea edi, [sensorConfig]
-                mov eax, [wszDeviceInstanceId]
-                push ebx
-                push edi
-                push eax
-                call ReadWbiosvcSettings
-                test eax, eax
-                jz .save_database
-                mov eax, WINBIO_E_INVALID_UNIT
-                jmp .fail
-
-.save_database: mov [ebx + WBIOSVC_DATABASE.szConnectionString], al
+                lea ebx, [database]
+                lea edi, [sensor]
+                mov [ebx + WBIOSVC_DATABASE.szConnectionString], al
                 mov [ebx + WBIOSVC_DATABASE.szFilePath], al
                 mov [edi + WBIOSVC_SENSOR.dwSystemSensor], eax
                 inc eax
@@ -907,23 +741,186 @@ proc InstallDatabaseForSensor guid:DWORD, wszDeviceInstanceId:DWORD
                 mov [ebx + WBIOSVC_DATABASE.dwAutoName], eax
                 mov al, 32
                 mov [ebx + WBIOSVC_DATABASE.dwInitialSize], eax
-                push ebx ; for SaveWbiosvcSettings
-                push edi
 
-                xor ecx, ecx
+                push 16/4
+                pop ecx
                 mov esi, [guid]
-@@:             lodsb
-                mov [ebx + WBIOSVC_DATABASE.guidDatabaseId + ecx], al
-                mov [edi + WBIOSVC_SENSOR.guidDatabaseId + ecx], al
-                inc ecx
-                cmp cl, 16
-                jb @b
+                lea edi, [edi + WBIOSVC_SENSOR.guidDatabaseId]
+                rep movsd
 
-                call SaveWbiosvcSettings
+.adjusted:      ; Write adjusted configs to the registry
+                mov ecx, database.szDatabasesKey.strlen
+                mov esi, database.szDatabasesKey
+                lea edi, [szDatabaseKey]
+                rep movsb
+                mov al, '\'
+                stosb
+                push edi
+                push [guid]
+                call GuidToString
 
-.fail:          pop edi
+                lea edi, [szSensorKey]
+                push [wszDeviceInstanceId]
+                push database.szSensorKeyFmt
+                push edi
+                call [wsprintfA]
+                add edi, eax
+                mov al, '\'
+                stosb
+                push [dwConfigId]
+                push database.szFormatD
+                push edi
+                call [wsprintfA]
+                add esp, 0ch + 0ch
+
+                push NULL
+                lea eax, [hDatabaseKey]
+                push eax
+                push NULL
+                push KEY_WRITE
+                push 0
+                push NULL
+                push 0
+                lea eax, [szDatabaseKey]
+                push eax
+                push HKEY_LOCAL_MACHINE
+                call [RegCreateKeyExA]
+                test eax, eax
+                jnz .finish
+
+                push NULL
+                lea eax, [hSensorKey]
+                push eax
+                push NULL
+                push KEY_WRITE
+                push 0
+                push NULL
+                push 0
+                lea eax, [szSensorKey]
+                push eax
+                push HKEY_LOCAL_MACHINE
+                call [RegCreateKeyExA]
+                test eax, eax
+                jz @f
+                push eax
+                push [hDatabaseKey]
+                call [RegCloseKey]
+                lea eax, [szDatabaseKey]
+                push eax
+                push HKEY_LOCAL_MACHINE
+                call [RegDeleteKeyA]
+                pop eax
+                jmp .finish
+@@:
+                lea eax, [database]
+                push eax
+                push [hDatabaseKey]
+                call SaveWbiosvcDatabaseKey
+
+                lea eax, [sensor]
+                push eax
+                push [hSensorKey]
+                call SaveWbiosvcSensorKey
+
+                push [hDatabaseKey]
+                push [hSensorKey]
+                call [RegCloseKey]
+                call [RegCloseKey]
+                xor eax, eax
+.finish:        pop edi
                 pop esi
                 pop ebx
+                ret
+endp
+
+proc GetDatabaseSensorDeviceInstanceId guid:DWORD, wszDeviceInstanceId:DWORD
+                mov eax, [wszDeviceInstanceId]
+                mov word [eax], 0
+                push ebp ; pUser
+                call .filter_end
+;-------------------------------------------------------------------------;
+                virtual at esp
+                  .guid    db 16 dup (?)
+                  .szGuid  db 36+1 + 3 dup (?)
+                  .allocaSize = $ - $$
+                  .edi     dd ?
+                  .esi     dd ?
+                  .ebp     dd ?
+                  .retAddr dd ?
+                  .hKey    dd ?
+                  .device  dd ?
+                  .config  dd ?
+                  .user    dd ?
+                end virtual
+                push ebp
+                push esi
+                push edi
+                sub esp, .allocaSize
+                mov ebp, [.user]
+
+                lea eax, [.szGuid]
+                mov ecx, [.hKey]
+                push 36+1
+                push esp
+                push eax
+                push 0
+                push RRF_RT_REG_SZ
+                push database.szDatabaseId
+                push NULL
+                push ecx
+                call [RegGetValueA]
+                test eax, eax
+                pop ecx
+                jnz .mismatch
+                cmp ecx, 36+1
+                jnz .mismatch
+
+                lea ecx, [.szGuid]
+                push esp ;.guid
+                push ecx
+                call StringToGuid
+                test eax, eax
+                jz .mismatch
+
+                mov ecx, 16
+                mov esi, esp ;lea esi, [.guid]
+                mov edi, [guid]
+                repz cmpsb
+                jnz .mismatch
+                mov esi, [.device]
+                mov edi, [wszDeviceInstanceId]
+@@:             lodsw
+                stosw
+                test ax, ax
+                jnz @b
+
+.match:         xor eax, eax
+                inc eax
+                jmp @f
+.mismatch:      xor eax, eax
+@@:             add esp, .allocaSize
+                pop edi
+                pop esi
+                pop ebp
+                retn 10h
+;-------------------------------------------------------------------------;
+.filter_end:    push NULL
+                call IterSensorConfigurations
+                test eax, eax
+                jz .exit
+                push eax
+                call [RegCloseKey]
+                push 1
+                pop eax
+.exit:          ret
+endp
+
+proc IsDatabaseInstalled guid:DWORD
+                local wszDeviceInstanceId[WINBIO_MAX_STRING_LEN]:WORD
+                lea eax, [wszDeviceInstanceId]
+                push eax
+                push [guid]
+                call GetDatabaseSensorDeviceInstanceId
                 ret
 endp
 
@@ -954,8 +951,7 @@ proc InstallDatabase guid:DWORD
 
                 push [dwCount]
                 push [pUnits]
-                push [guid]
-                call SensorInstallDialog
+                call SensorSelectDialog
                 test eax, eax
                 jnz .got_sensor
                 mov eax, WINBIO_E_CANCELED
@@ -978,80 +974,79 @@ proc InstallDatabase guid:DWORD
                 ret
 endp
 
-proc UninstallDatabase guid:DWORD, wszDeviceInstanceId:DWORD
+proc UninstallDatabase guid:DWORD
                 local szFilePath[MAX_PATH+4]:BYTE
                 local szSubKey[40]:BYTE
-                local pUnits:DWORD
-                local dwCount:DWORD
+                local szGUID[39+1]:BYTE
                 local hKey:DWORD
                 local hDatabasesKey:DWORD
 
                 push esi
                 push edi
 
-                mov eax, [wszDeviceInstanceId]
-                test eax, eax
-                jz .enum
-                mov [dwCount], 0
-                jmp .purge_sensor
-.retry:
-.enum:          lea eax, [dwCount]
-                push eax
-                lea eax, [pUnits]
-                push eax
-                push WINBIO_TYPE_FINGERPRINT
-                call [WinBioEnumBiometricUnits]
-                cmp eax, RPC_S_SERVER_TOO_BUSY
-                jz .retry
-                test eax, eax
-                jnz .fail
 
-                mov edi, [pUnits]
-.iter:          dec [dwCount]
-                js .sensor_keys_purged
-                lea eax, [edi + WINBIO_UNIT_SCHEMA.wszDeviceInstanceId]
-                add edi, sizeof.WINBIO_UNIT_SCHEMA
-
-.purge_sensor:  push TRUE
-                push FALSE
-                push [guid] ; user data
+.purge_sensor:  push [guid] ; user data
                 call .filter_end
 ;-------------------------------------------------------------------------;
                 virtual at esp
+                  .guid    db 16 dup (?)
+                  .szGuid  db 39+1 dup(?)
+                  .allocaSize = $ - $$
                   .edi     dd ?
                   .esi     dd ?
                   .rc      dd ?
                   .retAddr dd ?
                   .hKey    dd ?
-                  .guidDB  dd ?
+                  .device  dd ?
+                  .config  dd ?
                   .user    dd ?
                 end virtual
-                push 0
+
+                xor eax, eax
+                push eax
                 push esi
                 push edi
-                mov esi, [.user]
-                mov edi, [.guidDB]
+                sub esp, .allocaSize
+                mov ecx, [.hKey]
+                lea esi, [.szGuid]
+                mov edi, [.user]
+
+                push 40
+                push esp
+                push esi
+                push eax
+                push RRF_RT_REG_SZ
+                push database.szDatabaseId
+                push eax
+                push ecx
+                call [RegGetValueA]
+                test eax, eax
+                pop eax
+                jnz .skip
+                push esp;[.guid]
+                push esi
+                call StringToGuid
+                test eax, eax
+                mov esi, esp;lea edi, [.guid]
+                jz .skip
+
                 push 16
                 pop ecx
                 repz cmpsb
-                jnz .mismatch
-                or dword [.rc], 1
-.mismatch:      pop edi
+                jnz .skip
+                dec dword [.rc]
+
+.skip:          add esp, .allocaSize
+                pop edi
                 pop esi
                 pop eax
-                retn 0ch
+                retn 10h
 .filter_end:
 ;-------------------------------------------------------------------------;
-                push eax
-                call IterSensorKeys
-                jmp .iter
+                push NULL ; Iterate all device configurations
+                call IterSensorConfigurations
 
 .sensor_keys_purged:
-                cmp [pUnits], 0
-                jz @f
-                push [pUnits]
-                call [WinBioFree]
-@@:
                 ; Delete from WbioSvc databases key
                 lea eax, [hDatabasesKey]
                 push eax
@@ -1091,6 +1086,8 @@ proc UninstallDatabase guid:DWORD, wszDeviceInstanceId:DWORD
                 test eax, eax
                 pop eax
                 jnz @f
+                test eax, eax
+                jnz @f
                 mov byte [edi+eax], 0
 
                 push edi
@@ -1108,7 +1105,6 @@ proc UninstallDatabase guid:DWORD, wszDeviceInstanceId:DWORD
                 call [RegCloseKey]
 
 .databases_key_purged:
-
                 call DeleteAppDataSettings
 
                 xor eax, eax
@@ -1119,3 +1115,155 @@ proc UninstallDatabase guid:DWORD, wszDeviceInstanceId:DWORD
                 pop esi
                 ret
 endp
+
+;--------------------------------------------------------------------------;
+; Auxiliary fastcall functions for manipulating Windows registry keys.
+; ebx = hKey, esi = szValueName, edi = buffer, ecx = len (if applicable).
+; Upon return, edi = edi + ecx and CF=1 indicates an error.
+;--------------------------------------------------------------------------;
+Regaux:
+.getGuid:       virtual at esp
+                  .szGuid db 39 dup (?)
+                  .pad0   db ?
+                  .allocaSize = $ - $$
+                end virtual
+                sub esp, .allocaSize
+                lea eax, [.szGuid]
+                push 39
+                push esp
+                push eax
+                push 0
+                push RRF_RT_REG_SZ
+                push esi
+                push NULL
+                push ebx
+                call [RegGetValueA]
+                test eax, eax
+                pop eax
+                jnz .getGuid.error
+                cmp eax, 37
+                jz @f
+                cmp eax, 39
+                jnz .getGuid.error
+@@:             lea eax, [.szGuid]
+                push edi
+                push eax
+                call StringToGuid
+                test eax, eax
+                jz .getGuid.error
+                clc
+.getGuid.done:  lea edi, [edi + 16]
+                lea esp, [esp + .allocaSize]
+                retn
+.getGuid.error: stc
+                jmp .getGuid.done
+
+.getSz:         push ecx
+                push ecx
+                push esp
+                push edi
+                add edi, ecx
+                push 0
+                push RRF_RT_REG_SZ
+                push esi
+                push NULL
+                push ebx
+                call [RegGetValueA]
+                test eax, eax
+                pop eax
+                clc
+                jz @f
+                stc
+@@:             pop ecx
+                retn
+
+.getDword:      push 4
+                push esp
+                push edi
+                push 0
+                push RRF_RT_REG_DWORD
+                push esi
+                push NULL
+                push ebx
+                call [RegGetValueA]
+                test eax, eax
+                pop eax
+                clc
+                jz @f
+                stc
+@@:             lea edi, [edi + 4]
+                retn
+
+;--------------------------------------------------------------------------;
+
+.setGuid39:     push 0  ; without braces
+                jmp @f
+.setGuid:       push 1  ; with braces
+@@:             ;virtual at esp
+                ;  .szGuid db 39 dup (?)
+                ;  .pad0   db ?
+                ;  .allocaSize = $ - $$
+                ;end virtual
+                sub esp, .allocaSize
+
+                push esp
+                push edi
+                call GuidToString
+
+                mov edx, esp
+                add edx, [esp + .allocaSize]
+                sub eax, edx
+                lea ecx, [39+2*eax]
+                mov byte [esp+ecx], 0
+
+                push ecx
+                push edx
+                push REG_SZ
+                push 0
+                push esi
+                push ebx
+                call [RegSetValueExA]
+                test eax, eax
+                clc
+                jz @f
+                stc
+@@:
+                lea edi, [edi + 16]
+                lea esp, [esp + .allocaSize + 4]
+                retn
+
+.setSz:         push ecx
+                mov eax, ecx            ; store max length to eax
+                xor ecx, ecx
+@@:             cmp byte [edi+ecx], 0   ; calculate real length
+                lea ecx, [ecx+1]
+                jnz @b
+
+                push ecx
+                push edi
+                add edi, eax
+                push REG_SZ
+                push 0
+                push esi
+                push ebx
+                call [RegSetValueExA]
+                test eax, eax
+                clc
+                jz @f
+                stc
+@@:             pop ecx
+                retn
+
+.setDword:      push 4
+                push edi
+                push REG_DWORD
+                push 0
+                push esi
+                push ebx
+                call [RegSetValueExA]
+                add edi, 4
+                test eax, eax
+                clc
+                jz @f
+                stc
+@@:             retn
