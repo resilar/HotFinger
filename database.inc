@@ -688,8 +688,8 @@ proc InstallDatabaseForSensor guid:DWORD, wszDeviceInstanceId:DWORD
                 jnz .exit_cleanly
                 cmp ecx, 4
                 jnz .exit_cleanly
-                cmp eax, WINBIO_TYPE_FINGERPRINT
-                jnz .exit_cleanly
+                test eax, WINBIO_TYPE_FINGERPRINT
+                jz .exit_cleanly
 
                 ; System fingerprint sensor found.
                 ; Read sensor & database configuration keys.
@@ -984,7 +984,6 @@ proc UninstallDatabase guid:DWORD
                 push esi
                 push edi
 
-
 .purge_sensor:  push [guid] ; user data
                 call .filter_end
 ;-------------------------------------------------------------------------;
@@ -1034,7 +1033,7 @@ proc UninstallDatabase guid:DWORD
                 pop ecx
                 repz cmpsb
                 jnz .skip
-                dec dword [.rc]
+                dec [.rc]
 
 .skip:          add esp, .allocaSize
                 pop edi

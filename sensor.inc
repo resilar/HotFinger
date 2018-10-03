@@ -621,3 +621,62 @@ proc SelectUnit hdlg:DWORD, dwUnitId:DWORD
                 pop edi
 @@:             ret
 endp
+
+; Input:  guid[16]:BYTE
+; Output: wszDeviceInstanceId[WINBIO_MAX_STRING_LEN]:WORD
+proc GetSensorDeviceInstanceIdForDatabase guid:DWORD, wszDeviceInstanceId:DWORD
+                local pUnits:DWORD
+                local dwCount:DWORD
+
+                push ebx
+                push esi
+                push edi
+
+                push [wszDeviceInstanceId]
+                push [guid]
+                call GetDatabaseSensorDeviceInstanceId
+                test eax, eax
+                jnz .got_device
+
+.retry:         lea eax, [dwCount]
+                push eax
+                lea ecx, [pUnits]
+                push ecx
+                push WINBIO_TYPE_FINGERPRINT
+                call [WinBioEnumBiometricUnits]
+                cmp eax, RPC_S_SERVER_TOO_BUSY
+                jz .retry
+                test eax, eax
+                jz .enumerated
+
+                mov eax, sensor.szSensorUnavailable
+                lea ecx, [eax + sensor.szEnumSensorUnavailable - sensor.szSensorUnavailable]
+                push MB_ICONEXCLAMATION+MB_OK
+                push eax
+                push ecx
+                push NULL
+                call [MessageBoxA]
+                jmp .fail
+
+.enumerated:    push [dwCount]
+                push [pUnits]
+                call SensorSelectDialog
+                test eax, eax
+                pushf
+                push [pUnits]
+                call [WinBioFree]
+                popf
+                jz .fail
+
+                push [wszDeviceInstanceId]
+                push [guid]
+                call GetDatabaseSensorDeviceInstanceId
+                test eax, eax
+                jnz .got_device
+
+.fail:          xor eax, eax
+.got_device:    pop edi
+                pop esi
+                pop ebx
+                ret
+endp

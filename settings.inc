@@ -151,39 +151,11 @@ proc ReadAppDataSettings pSettings:DWORD
                 stosd
                 jle .corrupt
 
-                ; [Devices]
-                add ebx, settings.szSectionDevice - settings.szSectionGUI
-                lea eax, [szPath]
-                push eax
-                push WINBIO_MAX_STRING_LEN
-                push edi
-                push NULL
-                push esi
-                push ebx
-                call [GetPrivateProfileStringA]
-                mov ecx, WINBIO_MAX_STRING_LEN
-                add esi, settings.szInstanceId.size
-
-                ; convert InstanceId to wsz
-                push esi
-                lea esi, [edi + ecx-1]
-                lea edi, [edi + ecx*2]
-                push edi
-                std
-                dec edi
-                dec edi
-@@:             lodsb
-                stosw
-                loop @b
-                cld
-                pop edi
-                pop esi
-
                 ; [Commands]
                 mov eax, edi
                 mov ecx, MAX_PATH
                 mov edx, .get_str
-                add ebx, settings.szSectionCommand - settings.szSectionDevice
+                add ebx, settings.szSectionCommand - settings.szSectionGUI
 
                 ; lea edi, [pSettings + SETTINGS.cmd.RThumb]
                 ; mov esi, settings.szRThumb
@@ -312,34 +284,11 @@ proc WriteAppDataSettings pSettings:DWORD
                 ;mov edi, settings.szKeyCY
                 call edx
 
-                ; [Devices]
-                add ebx, settings.szSectionDevice - settings.szSectionGUI
-                lea eax, [szPath]
-                push eax
-                push esi
-                push edi
-                push ebx
-
-                mov ecx, WINBIO_MAX_STRING_LEN
-                add edi, settings.szInstanceId.size
-                push edi
-                mov edi, esi
-                push ecx
-@@:             lodsw
-                stosb
-                loop @b
-                mov eax, ecx
-                pop ecx
-                rep stosb
-                pop edi
-
-                call [WritePrivateProfileStringA]
-
                 ; [Commands]
                 mov eax, esi
                 mov ecx, MAX_PATH
                 mov edx, .write_str
-                add ebx, settings.szSectionCommand - settings.szSectionDevice
+                add ebx, settings.szSectionCommand - settings.szSectionGUI
 
                 ; lea eax, [pSettings + SETTINGS.cmd.RThumb]
                 ; mov edi, settings.szRThumb

@@ -5,8 +5,6 @@ guidDatabase db 00h,11h,22h,33h,44h,55h,66h,77h,88h,99h,0aah,0bbh,0cch,0ddh,0eeh
 ; main.asm
 ;-------------------------------------------------------------------------;
 hotfinger:
-.szSensorUnavailable     db 'Sensor unavailable.',0
-.szEnumSensorUnavailable db 'Sensor enumeration unavailable.',0
 
 ;-------------------------------------------------------------------------;
 ; cli.inc
@@ -96,6 +94,8 @@ align 2
 .szWindowContextMissing     db 'Window context lost.',0
 
 .szOutOfMemoryError db 'Out of memory.',0
+.szFrameworkError   db 'Error opening WinBio framework.',0
+.szSensor404Error   db 'Sensor device not found (is the sensor attached?)',0
 .szSessionError     db 'Error opening WinBio session.',0
 .szIdentifyError    db 'Identify error (0x%08X)',0dh,0ah,0dh,0ah
                     db 'Restart the program',0
@@ -142,6 +142,9 @@ sensor:
 .szError        = gui.szError
 .szSessionError = gui.szSessionError
 
+.szSensorUnavailable     db 'Sensor unavailable.',0
+.szEnumSensorUnavailable db 'Sensor enumeration unavailable.',0
+
 ;-------------------------------------------------------------------------;
 ; settings.inc
 ;-------------------------------------------------------------------------;
@@ -154,16 +157,12 @@ settings:
 .szFormatD = database.szFormatD
 
 .szSectionGUI      db 'GUI',0
-.szSectionDevice   db 'Device',0
 .szSectionCommand  db 'Command',0
 
 .szKeyX  db 'x',0
 .szKeyY  db 'y',0
 .szKeyCX db 'cx',0
 .szKeyCY db 'cy',0
-
-.szInstanceId db 'InstanceId',0
-.szInstanceId.size = $-.szInstanceId
 
 .szRThumb        db 'RThumb',0
 .szRIndexFinger  db 'RIndex',0

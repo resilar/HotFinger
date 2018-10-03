@@ -26,17 +26,12 @@ struct COMMAND_SETTINGS
   LLittle db MAX_PATH dup (?)
 ends
 
-struct DEVICE_SETTINGS
-  wszDeviceInstanceId du WINBIO_MAX_STRING_LEN dup (?)
-ends
-
 struct VOLATILE_SETTINGS
-  dwUnitId dd ? ; WINBIO_UNIT_SCHEMA
+  wszDeviceInstanceId du WINBIO_MAX_STRING_LEN dup (?)
 ends
 
 struct SETTINGS
   GUI GUI_SETTINGS
-  dev DEVICE_SETTINGS
   cmd COMMAND_SETTINGS
   vol VOLATILE_SETTINGS
 ends
@@ -59,24 +54,18 @@ entry $
 ; WinMain
 ;-------------------------------------------------------------------------;
 proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
-                local wszDeviceInstanceId[WINBIO_MAX_STRING_LEN]:WORD
                 local ini:SETTINGS
                 local wc:WNDCLASSEX
                 local msg:MSG
                 local icl:INITCOMMONCONTROLSEX
-                local pUnits:DWORD
-                local dwCount:DWORD
                 local rc:DWORD
 
                 push ebx
                 push esi
                 push edi
 
-                xor eax, eax
-                mov [pUnits], eax
-                mov [dwCount], eax
-                inc eax
-                mov [rc], eax
+                push 1
+                pop [rc]
 
                 ; Initialize common controls & OLE
                 push sizeof.INITCOMMONCONTROLSEX
@@ -97,96 +86,12 @@ proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
                 push ebx
                 call ReadAppDataSettings
 
-                lea eax, [wszDeviceInstanceId]
+                lea eax, [ebx + SETTINGS.vol.wszDeviceInstanceId]
                 push eax
                 push guidDatabase
-                call GetDatabaseSensorDeviceInstanceId
-
-                ; Get sensor (validate the one read from settings)
-                ; TODO: Move this to settings.inc or somewhere else
-.retry:         lea eax, [dwCount]
-                push eax
-                lea ecx, [pUnits]
-                push ecx
-                push WINBIO_TYPE_FINGERPRINT
-                call [WinBioEnumBiometricUnits]
-                cmp eax, RPC_S_SERVER_TOO_BUSY
-                jz .retry
+                call GetSensorDeviceInstanceIdForDatabase
                 test eax, eax
-                jz .enumerated
-
-                mov eax, hotfinger.szSensorUnavailable
-                lea ecx, [eax + hotfinger.szEnumSensorUnavailable - hotfinger.szSensorUnavailable]
-                push MB_ICONEXCLAMATION+MB_OK
-                push eax
-                push ecx
-                push NULL
-                call [MessageBoxA]
-                jmp .die
-
-.enumerated:    mov eax, [pUnits]
-                xor edx, edx
-.sensor_loop:   cmp edx, [dwCount]
-                jae .select_sensor
-
-                lea edi, [eax + WINBIO_UNIT_SCHEMA.wszDeviceInstanceId]
-
-                push eax
-                push edx
-                lea eax, [wszDeviceInstanceId]
-                push eax
-                push edi
-                call [lstrcmpiW]
-                test eax, eax
-                pop edx
-                pop eax
-                jz .found_sensor
-
-                add eax, sizeof.WINBIO_UNIT_SCHEMA
-                inc edx
-                jmp .sensor_loop
-
-.select_sensor: push [dwCount]
-                push [pUnits]
-                call SensorSelectDialog
-                test eax, eax
-                jz .select_fail
-                lea esi, [eax + WINBIO_UNIT_SCHEMA.wszDeviceInstanceId]
-                lea edi, [wszDeviceInstanceId]
-                push eax
-                push edi
-                push guidDatabase
-                call GetDatabaseSensorDeviceInstanceId
-                test eax, eax
-                pop eax
-                jz .select_fail
-
-                push eax
-                push esi
-                push edi
-                call [lstrcmpiW]
-                test eax, eax
-                pop eax
-                jz .found_sensor
-
-.select_fail:   push [pUnits]
-                call [WinBioFree]
-                jmp .die
-
-.found_sensor:  push [eax + WINBIO_UNIT_SCHEMA.dwUnitId]
-                pop [ebx + SETTINGS.vol.dwUnitId]
-                mov ecx, WINBIO_MAX_STRING_LEN
-                lea esi, [eax + WINBIO_UNIT_SCHEMA.wszDeviceInstanceId]
-                lea edi, [ebx + SETTINGS.dev.wszDeviceInstanceId]
-
-@@:             lodsw
-                test ax, ax
-                jz @f
-                stosw
-                loop @b
-@@:             rep stosw
-                push [pUnits]
-                call [WinBioFree]
+                jz .die
 
 ;--------------------------------------------------------------------------;
 ; Register window class
@@ -298,7 +203,7 @@ proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
 ;--------------------------------------------------------------------------;
 ; Finish
 ;--------------------------------------------------------------------------;
-                cmp word [ini.dev.wszDeviceInstanceId], 0
+                cmp word [ini.vol.wszDeviceInstanceId], 0
                 jz .die ; uninstalled or something, do not save settings
 
                 push ebx

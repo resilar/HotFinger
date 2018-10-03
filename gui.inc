@@ -97,12 +97,14 @@ STATE_ERROR            = 0x80000000
 struct CONTEXT
   win          WIN
   pSettings    dd ?
+  dwUnitId     dd ?
   dwState      dd ?
   dwDPI        dd ?
 
   hInst        dd ?
   hFont        dd ?
   hSession     dd ?
+  hFramework   dd ?
 
   hwndStatus   dd ?
   hMenu        dd ?
@@ -216,7 +218,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 ; Create statusbar
                 lea edi, [buf]
                 mov eax, [ebx + CONTEXT.pSettings]
-                lea esi, [eax + SETTINGS.dev.wszDeviceInstanceId]
+                lea esi, [eax + SETTINGS.vol.wszDeviceInstanceId]
                 mov ecx, MAX_PATH
                 push edi
 @@:             lodsw
@@ -503,8 +505,8 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call [GetDpiForWindow]
                 mov [ebx + CONTEXT.dwDPI], eax
 
-                ; Open async WinBio session
-                lea eax, [ebx + CONTEXT.hSession]
+                ; Open async WinBio framework for enumerating biometric units
+                lea eax, [ebx + CONTEXT.hFramework]
                 push eax
                 push TRUE
                 push ebx
@@ -512,17 +514,10 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push WM_WINBIO
                 push [hwnd]
                 push WINBIO_ASYNC_NOTIFY_MESSAGE
-                push guidDatabase
-                push 1
-                mov eax, [ebx + CONTEXT.pSettings]
-                lea eax, [eax + SETTINGS.vol.dwUnitId]
-                push eax
-                push WINBIO_FLAG_ADVANCED
-                push WINBIO_POOL_PRIVATE
-                push WINBIO_TYPE_FINGERPRINT
-                call [WinBioAsyncOpenSession]
+                call [WinBioAsyncOpenFramework]
+
                 test eax, eax
-                mov eax, gui.szSessionError
+                mov eax, gui.szFrameworkError
                 jz .create_ok
                 mov [ebx + CONTEXT.dwState], STATE_ERROR
 
@@ -774,8 +769,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 cmp eax, 10
                 jae .enroll_ret
                 inc eax ; add eax, WINBIO_ANSI_381_POS_RH_THUMB (1)
-                mov ecx, [ebx + CONTEXT.pSettings]
-                push [ecx + SETTINGS.vol.dwUnitId]
+                push [ebx + CONTEXT.dwUnitId]
                 push eax
                 push [ebx + CONTEXT.hSession]
                 call [WinBioEnrollBegin]
@@ -811,7 +805,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 mov eax, [ebx + CONTEXT.pSettings]
                 test eax, eax
                 jz @f
-                mov word [eax + SETTINGS.dev.wszDeviceInstanceId], 0
+                mov word [eax + SETTINGS.vol.wszDeviceInstanceId], 0
 @@:             ;push [hwnd]
                 ;call [DestroyWindow]
                 ;retn
@@ -865,10 +859,11 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call .get_ebx_ctx
 
                 mov eax, [esi + WINBIO_ASYNC_RESULT.dwOperation]
-                cmp eax, 0ffh
+                cmp eax, 07fh
                 ja .winbio_done
+
                 cmp al, WINBIO_OPERATION_OPEN
-                jnz .enroll_begin
+                jnz .id
                 mov eax, [esi + WINBIO_ASYNC_RESULT.hSessionHandle]
                 mov ebx, [esi + WINBIO_ASYNC_RESULT.pUserData]
                 test eax, eax
@@ -890,6 +885,57 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call [MessageBoxA]
                 push [hwnd]
                 call [DestroyWindow]
+                jmp .winbio_done
+
+.id:            cmp al, WINBIO_OPERATION_IDENTIFY
+                jnz .enroll_begin
+
+                mov eax, [esi + WINBIO_ASYNC_RESULT.dwApiStatus]
+                test eax, eax
+                ;mov ecx, [esi + WINBIO_ASYNC_RESULT.Identify.dwSubFactor]
+                ;mov ecx, [esi + WINBIO_ASYNC_RESULT.Identify.dwRejectDetail]
+                jz .identified
+                and [ebx + CONTEXT.dwState], STATE_IDENTIFYING xor -1
+                cmp eax, WINBIO_E_UNKNOWN_ID
+                jz .id_retry
+                cmp eax, WINBIO_E_BAD_CAPTURE
+                jz .id_retry
+                cmp eax, WINBIO_E_CANCELED
+                jnz .id_error
+
+                test [ebx + CONTEXT.dwState], STATE_ENROLLING
+                jnz .winbio_done
+                push .winbio_done
+                test [ebx + CONTEXT.dwState], STATE_ENROLL_REQUESTED
+                jnz .start_enroll
+                retn
+
+.id_error:      sub esp, 60h
+                or [ebx + CONTEXT.dwState], STATE_ERROR
+                mov ecx, esp
+
+                push eax
+                push gui.szIdentifyError
+                push ecx
+                call [wsprintfA]
+
+                push MB_ICONERROR
+                push gui.szError
+                lea eax, [esp+4*3+4*2]
+                push eax
+                push [ebx + CONTEXT.win.hwnd]
+                call [MessageBoxA]
+
+                add esp, 60h + 4*3
+                jmp .winbio_done
+
+.identified:    mov eax, [esi + WINBIO_ASYNC_RESULT.Identify.dwSubFactor]
+                push eax
+                push eax
+                call SetSelection
+                call RunSubFactorCommand
+
+.id_retry:      call .start_identify
                 jmp .winbio_done
 
 .enroll_begin:  cmp al, WINBIO_OPERATION_ENROLL_BEGIN
@@ -964,7 +1010,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call SetStatus
                 jmp .ack_req
 .discard:       cmp al, WINBIO_OPERATION_ENROLL_DISCARD
-                jnz .id
+                jnz .enum_units
                 and [ebx + CONTEXT.dwState], STATE_ENROLLING xor -1
                 push STATUS_DISCARDED
                 call SetStatus
@@ -974,55 +1020,88 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call .start_identify
                 jmp .winbio_done
 
-.id:            cmp al, WINBIO_OPERATION_IDENTIFY
-                jnz .winbio_done
+.enum_units:    cmp al, WINBIO_OPERATION_ENUM_BIOMETRIC_UNITS
+                jnz .open_fw
+                cmp [esi + WINBIO_ASYNC_RESULT.dwApiStatus], 0
+                jnz .units_error
 
-                mov eax, [esi + WINBIO_ASYNC_RESULT.dwApiStatus]
-                test eax, eax
-                ;mov ecx, [esi + WINBIO_ASYNC_RESULT.Identify.dwSubFactor]
-                ;mov ecx, [esi + WINBIO_ASYNC_RESULT.Identify.dwRejectDetail]
-                jz .identified
-                and [ebx + CONTEXT.dwState], STATE_IDENTIFYING xor -1
-                cmp eax, WINBIO_E_UNKNOWN_ID
-                jz .id_retry
-                cmp eax, WINBIO_E_BAD_CAPTURE
-                jz .id_retry
-                cmp eax, WINBIO_E_CANCELED
-                jnz .id_error
+                xor ecx, ecx
+.next_unit:     cmp ecx, [esi + WINBIO_ASYNC_RESULT.EnumBiometricUnits.dwUnitCount]
+                jae .sensor_404
 
-                test [ebx + CONTEXT.dwState], STATE_ENROLLING
-                jnz .winbio_done
-                push .winbio_done
-                test [ebx + CONTEXT.dwState], STATE_ENROLL_REQUESTED
-                jnz .start_enroll
-                retn
-
-.id_error:      sub esp, 60h
-                or [ebx + CONTEXT.dwState], STATE_ERROR
-                mov ecx, esp
+                imul eax, ecx, sizeof.WINBIO_UNIT_SCHEMA
+                add eax, [esi + WINBIO_ASYNC_RESULT.EnumBiometricUnits.pUnitSchemaArray]
 
                 push eax
-                push gui.szIdentifyError
                 push ecx
-                call [wsprintfA]
-
-                push MB_ICONERROR
-                push gui.szError
-                lea eax, [esp+4*3+4*2]
+                lea eax, [eax + WINBIO_UNIT_SCHEMA.wszDeviceInstanceId]
+                mov ecx, [ebx + CONTEXT.pSettings]
+                lea ecx, [ecx + SETTINGS.vol.wszDeviceInstanceId]
                 push eax
-                push [ebx + CONTEXT.win.hwnd]
-                call [MessageBoxA]
+                push ecx
+                call [lstrcmpiW]
+                pop ecx
+                inc ecx
+                test eax, eax
+                pop eax
+                jnz .next_unit
 
-                add esp, 60h + 4*3
+                nop
+                push [eax + WINBIO_UNIT_SCHEMA.dwUnitId]
+                pop [ebx + CONTEXT.dwUnitId]
+
+                ; Open async WinBio session
+                lea eax, [ebx + CONTEXT.hSession]
+                push eax
+                push TRUE
+                push ebx
+                push NULL
+                push WM_WINBIO
+                push [hwnd]
+                push WINBIO_ASYNC_NOTIFY_MESSAGE
+                push guidDatabase
+                push 1
+                lea eax, [ebx + CONTEXT.dwUnitId]
+                push eax
+                push WINBIO_FLAG_ADVANCED
+                push WINBIO_POOL_PRIVATE
+                push WINBIO_TYPE_FINGERPRINT
+                call [WinBioAsyncOpenSession]
+                test eax, eax
+                jz .winbio_done
+                or [ebx + CONTEXT.dwState], STATE_ERROR
+
+                push MB_ICONERROR or MB_OK
+                push gui.szError
+                push gui.szSessionError
+                push [hwnd]
+                call [MessageBoxA]
                 jmp .winbio_done
 
-.identified:    mov eax, [esi + WINBIO_ASYNC_RESULT.Identify.dwSubFactor]
-                push eax
-                push eax
-                call SetSelection
-                call RunSubFactorCommand
+.sensor_404:    push MB_ICONERROR or MB_OK
+                push gui.szError
+                push gui.szSensor404Error
+                push [hwnd]
+                call [MessageBoxA]
 
-.id_retry:      call .start_identify
+.units_error:   or [ebx + CONTEXT.dwState], STATE_ERROR
+                jmp .winbio_done
+
+.open_fw:       cmp al, WINBIO_OPERATION_OPEN_FRAMEWORK
+                jnz .winbio_done
+
+                mov eax, [esi + WINBIO_ASYNC_RESULT.hSessionHandle]
+                mov ebx, [esi + WINBIO_ASYNC_RESULT.pUserData]
+                test eax, eax
+                mov [ebx + CONTEXT.hFramework], eax
+                jz .fw_error
+
+                push WINBIO_TYPE_FINGERPRINT
+                push eax
+                call [WinBioAsyncEnumBiometricUnits]
+                test eax, eax
+                jz .winbio_done
+.fw_error:      or [ebx + CONTEXT.dwState], STATE_ERROR
                 jmp .winbio_done
 
 .winbio_done:   push esi
@@ -1044,8 +1123,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push eax ; pRejectDetail
                 push ecx ; pSubFactor
                 push edx ; pIdentity
-                mov eax, [ebx + CONTEXT.pSettings]
-                lea eax, [eax + SETTINGS.vol.dwUnitId]
+                lea eax, [ebx + CONTEXT.dwUnitId]
                 push eax ; pUnitId
                 push [ebx + CONTEXT.hSession] ; SessionHandle
                 call [WinBioIdentify]
@@ -1076,7 +1154,12 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 mov eax, [ebx + CONTEXT.pSettings]
                 call SaveSettings
 
-.free_context:  mov eax, [ebx + CONTEXT.hSession]
+.free_context:  mov eax, [ebx + CONTEXT.hFramework]
+                test eax, eax
+                jz @f
+                push eax
+                call [WinBioCloseFramework]
+@@:             mov eax, [ebx + CONTEXT.hSession]
                 test eax, eax
                 jz @f
                 push eax
