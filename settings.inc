@@ -151,6 +151,10 @@ proc ReadAppDataSettings pSettings:DWORD
                 stosd
                 jle .corrupt
 
+                xor edx, edx
+                call ecx
+                stosd ; [edi + SETTINGS.GUI.dwMinimized]
+
                 ; [Commands]
                 mov eax, edi
                 mov ecx, MAX_PATH
@@ -282,6 +286,10 @@ proc WriteAppDataSettings pSettings:DWORD
 
                 lodsd ;mov eax, [pSettings + SETTINGS.GUI.cy]
                 ;mov edi, settings.szKeyCY
+                call edx
+
+                lodsd ;mov eax, [pSettings + SETTINGS.GUI.dwMinimized]
+                ;mov edi, settings.szMinimized
                 call edx
 
                 ; [Commands]

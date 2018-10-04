@@ -8,11 +8,18 @@ IDC_BROWSE = 202h
 IDC_ENROLL = 203h
 IDC_STATUS = 204h
 
-IDM_PREFERENCES = WM_USER+101
-IDM_UNINSTALL   = WM_USER+102
-IDM_QUIT        = WM_USER+103
-IDM_GITHUB      = WM_USER+201
-IDM_ABOUT       = WM_USER+202
+WM_APP        = 8000h
+WM_WINBIO     = WM_APP+1
+WM_DPICHANGED = 2e0h
+WM_TRAY       = WM_USER+150
+
+TRAY_ID = 100
+
+IDM_PREFERENCES = WM_USER+201
+IDM_UNINSTALL   = WM_USER+202
+IDM_QUIT        = WM_USER+203
+IDM_GITHUB      = WM_USER+301
+IDM_ABOUT       = WM_USER+302
 
 WIN_WIDTH  = 400
 WIN_HEIGHT = 360
@@ -35,10 +42,6 @@ STATUS_DISCARDING  = 6
 STATUS_COMMITTED   = 7
 STATUS_DISCARDED   = 8
 STATUS_IDENTIFYING = 9
-
-WM_APP        = 8000h
-WM_WINBIO     = WM_APP+1
-WM_DPICHANGED = 2e0h
 
 SS_ENDELLIPSIS = 4000h
 
@@ -110,6 +113,7 @@ struct CONTEXT
   hMenu        dd ?
   hOptionsMenu dd ?
   hHelpMenu    dd ?
+  hTrayMenu    dd ?
 
   winList      WIN
   winInfo      WIN
@@ -132,14 +136,18 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 jz .WM_CREATE
                 cmp eax, WM_GETMINMAXINFO
                 jz .WM_GETMINMAXINFO
-                cmp eax, WM_SIZE
-                jz .WM_SIZE
                 cmp eax, WM_DPICHANGED
                 jz .WM_DPICHANGED
+                cmp eax, WM_SIZE
+                jz .WM_SIZE
+                cmp eax, WM_SYSCOMMAND
+                jz .WM_SYSCOMMAND
                 cmp eax, WM_COMMAND
                 jz .WM_COMMAND
                 cmp eax, WM_NOTIFY
                 jz .WM_NOTIFY
+                cmp eax, WM_TRAY
+                jz .WM_TRAY
                 cmp eax, WM_WINBIO
                 jz .WM_WINBIO
                 cmp eax, WM_CLOSE
@@ -303,6 +311,14 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push [ebx + CONTEXT.hMenu]
                 push [ebx + CONTEXT.win.hwnd]
                 call [SetMenu]
+
+                call [CreatePopupMenu]
+                mov [ebx + CONTEXT.hTrayMenu], eax
+                push gui.szQuit
+                push IDM_QUIT
+                push MF_STRING
+                push [ebx + CONTEXT.hTrayMenu]
+                call [AppendMenuA]
 
                 ; Get client area of our window ...
                 sub esp, 4*4
@@ -567,10 +583,10 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push [hwnd]
                 call [GetDpiForWindow]
                 mov [ebx + CONTEXT.dwDPI], eax
-                jmp @f
+                retn
 
 .WM_SIZE:       call .get_ebx_ctx
-@@:             push edi
+                push edi
                 push esi
                 mov eax, [lParam]
                 movzx ecx, ax
@@ -636,6 +652,24 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
                 pop esi
                 pop edi
+                retn
+
+;-------------------------------------------------------------------------;
+
+.WM_SYSCOMMAND: mov eax, [wParam]
+                cmp eax, SC_MINIMIZE
+                jnz .default
+                call .get_ebx_ctx
+                push [hwnd]
+                call ShowTrayIcon
+                test eax, eax
+                jz .default
+                push SW_HIDE
+                push [hwnd]
+                call [ShowWindow]
+                push 1
+                mov eax, [ebx + CONTEXT.pSettings]
+                pop [eax + SETTINGS.GUI.dwMinimized]
                 retn
 
 ;-------------------------------------------------------------------------;
@@ -852,6 +886,44 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
 ;--------------------------------------------------------------------------;
 
+.WM_TRAY:       mov edx, [lParam]
+                cmp edx, WM_LBUTTONDBLCLK ;WM_LBUTTONDOWN
+                jnz @f
+                call .get_ebx_ctx
+                push [ebx + CONTEXT.win.hwnd]
+                call HideTrayIcon
+                mov eax, [ebx + CONTEXT.pSettings]
+                mov [eax + SETTINGS.GUI.dwMinimized], 0
+                push SW_SHOW
+                push [ebx + CONTEXT.win.hwnd]
+                call [ShowWindow]
+                retn
+@@:
+                cmp edx, WM_RBUTTONDOWN
+                jnz .default
+                call .get_ebx_ctx
+                sub esp, sizeof.POINT
+                push esp
+                call [GetCursorPos]
+                test eax, eax
+                jnz @f
+                mov [esp + POINT.x], eax
+                mov [esp + POINT.y], eax
+@@:             mov eax, esp
+                push NULL
+                push [ebx + CONTEXT.win.hwnd]
+                push 0
+                push [eax + POINT.y]
+                push [eax + POINT.x]
+                push TPM_BOTTOMALIGN + TPM_LEFTBUTTON + TPM_RIGHTBUTTON
+                push [ebx + CONTEXT.hTrayMenu]
+                call [TrackPopupMenu]
+
+                add esp, sizeof.POINT
+                retn
+
+;--------------------------------------------------------------------------;
+
 .WM_WINBIO:     push esi
                 mov esi, [lParam]
                 test esi, esi
@@ -1046,7 +1118,6 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 pop eax
                 jnz .next_unit
 
-                nop
                 push [eax + WINBIO_UNIT_SCHEMA.dwUnitId]
                 pop [ebx + CONTEXT.dwUnitId]
 
@@ -1165,6 +1236,18 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push eax
                 call [WinBioCloseSession]
 @@:
+                mov eax, [ebx + CONTEXT.hTrayMenu]
+                test eax, eax
+                jz @f
+                push eax
+                call [DestroyMenu]
+@@:
+                mov eax, [ebx + CONTEXT.pSettings]
+                cmp [eax + SETTINGS.GUI.dwMinimized], 0
+                jz @f
+                push [hwnd]
+                call HideTrayIcon
+@@:
                 push ebx
                 push 0
                 call [GetProcessHeap]
@@ -1197,6 +1280,68 @@ proc AboutDialogProc hdlg:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call [EndDialog]
                 push 1
                 pop eax
+                ret
+endp
+
+; Create a tray icon. The caller should hide the main window.
+; Returns eax != 0 if the tray icon was created successfully
+proc ShowTrayIcon hwnd:DWORD
+                local nid:NOTIFYICONDATAA
+                push esi
+                push edi
+
+                push sizeof.NOTIFYICONDATAA
+                pop ecx
+                lea edi, [nid]
+                push ecx
+                rep stosb
+                pop [nid.cbSize]
+
+                push [hwnd]
+                pop [nid.hWnd]
+                mov [nid.uID], TRAY_ID
+                mov [nid.uCallbackMessage], WM_TRAY
+
+                push IDI_MAIN
+                push NULL
+                call [GetModuleHandleA]
+                push eax
+                call [LoadIconA]
+                mov [nid.hIcon], eax
+
+                push gui.szTip.size
+                pop ecx
+                mov esi, gui.szTip
+                lea edi, [nid.szTip]
+                rep movsb
+
+                mov cl, NIF_ICON or NIF_MESSAGE or NIF_TIP
+                mov [nid.uFlags], ecx
+
+                lea eax, [nid]
+                push eax
+                push NIM_ADD
+                call [Shell_NotifyIconA]
+                pop edi
+                pop esi
+                ret
+endp
+
+proc HideTrayIcon hwnd:DWORD
+                mov ecx, sizeof.NOTIFYICONDATAA/4
+@@:             push 0
+                loop @b
+
+                mov [esp + NOTIFYICONDATAA.cbSize], sizeof.NOTIFYICONDATAA
+                mov eax, [hwnd]
+                mov [esp + NOTIFYICONDATAA.hWnd], eax
+                mov [esp + NOTIFYICONDATAA.uID], TRAY_ID
+
+                push esp
+                push NIM_DELETE
+                call [Shell_NotifyIconA]
+
+                add esp, sizeof.NOTIFYICONDATAA
                 ret
 endp
 

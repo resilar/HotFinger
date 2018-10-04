@@ -11,6 +11,7 @@ struct GUI_SETTINGS
   y  dd ?
   cx dd ?
   cy dd ?
+  dwMinimized dd ?
 ends
 
 struct COMMAND_SETTINGS
@@ -169,11 +170,20 @@ proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
 
 .show_window:   mov esi, eax
                 lea edi, [msg]
+                cmp [ini + SETTINGS.GUI.dwMinimized], 0
+                jnz .show_in_tray
                 push esi
                 push [nCmdShow]
                 push esi
                 call [ShowWindow]
                 call [UpdateWindow]
+                jmp .msg_loop
+
+.show_in_tray:  push SW_HIDE
+                push esi
+                call [ShowWindow]
+                push esi
+                call ShowTrayIcon
 
 ;--------------------------------------------------------------------------;
 ; Enter message loop
@@ -302,6 +312,7 @@ section '.idata' import readable
          CommandLineToArgvW, 'CommandLineToArgvW', \
          SHGetFileInfo, 'SHGetFileInfo', \
          SHGetFolderPathA, 'SHGetFolderPathA', \
+         Shell_NotifyIconA, 'Shell_NotifyIconA', \
          ShellExecuteA, 'ShellExecuteA', \
          ShellExecuteExW, 'ShellExecuteExW', \
          ShellExecuteW, 'ShellExecuteW'
@@ -315,12 +326,14 @@ section '.idata' import readable
         CreatePopupMenu, 'CreatePopupMenu', \
         CreateWindowExA, 'CreateWindowExA', \
         DefWindowProcA, 'DefWindowProcA', \
+        DestroyMenu, 'DestroyMenu', \
         DestroyWindow, 'DestroyWindow', \
         DialogBoxParamA, 'DialogBoxParamA', \
         DispatchMessageA, 'DispatchMessageA', \
         EnableWindow, 'EnableWindow', \
         EndDialog, 'EndDialog', \
         GetClientRect, 'GetClientRect', \
+        GetCursorPos, 'GetCursorPos', \
         GetDlgItem, 'GetDlgItem', \
         GetDpiForSystem, 'GetDpiForSystem', \
         GetDpiForWindow, 'GetDpiForWindow', \
@@ -345,6 +358,7 @@ section '.idata' import readable
         SetWindowLongA, 'SetWindowLongA', \
         SetWindowTextA, 'SetWindowTextA', \
         ShowWindow, 'ShowWindow', \
+        TrackPopupMenu, 'TrackPopupMenu', \
         TranslateMessage, 'TranslateMessage', \
         UpdateWindow, 'UpdateWindow', \
         wsprintfA, 'wsprintfA'

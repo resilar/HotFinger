@@ -79,6 +79,9 @@ gui:
 .szFinger        db 'Finger',0
 .szCommand       db 'Command',0
 
+.szTip           db 'HotFinger',0
+.szTip.size = $ - .szTip
+
 align 2
 .wszPathCue      du 'Command to execute',0
 .szBrowse        db 'Browse',0
@@ -163,6 +166,7 @@ settings:
 .szKeyY  db 'y',0
 .szKeyCX db 'cx',0
 .szKeyCY db 'cy',0
+.szMinimized db 'Minimized',0
 
 .szRThumb        db 'RThumb',0
 .szRIndexFinger  db 'RIndex',0
