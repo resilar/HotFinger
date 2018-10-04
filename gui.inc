@@ -11,7 +11,8 @@ IDC_STATUS = 204h
 WM_APP        = 8000h
 WM_WINBIO     = WM_APP+1
 WM_DPICHANGED = 2e0h
-WM_TRAY       = WM_USER+150
+WM_NUDGE      = WM_USER+100
+WM_TRAY       = WM_USER+101
 
 TRAY_ID = 100
 
@@ -146,6 +147,8 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 jz .WM_COMMAND
                 cmp eax, WM_NOTIFY
                 jz .WM_NOTIFY
+                cmp eax, WM_NUDGE
+                jz .WM_NUDGE
                 cmp eax, WM_TRAY
                 jz .WM_TRAY
                 cmp eax, WM_WINBIO
@@ -883,6 +886,25 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call .get_ebx_ctx
                 call UpdateSelection
                 retn
+
+;--------------------------------------------------------------------------;
+
+.WM_NUDGE:      push [hwnd]
+                push [hwnd]
+                push SW_SHOW
+                push [hwnd]
+                call [ShowWindow]
+                call [SetForegroundWindow]
+                call [SetFocus]
+                call .get_ebx_ctx
+                mov eax, [ebx + CONTEXT.pSettings]
+                cmp [eax + SETTINGS.GUI.dwMinimized], 0
+                jz @f
+                push 0
+                pop [eax + SETTINGS.GUI.dwMinimized]
+                push [hwnd]
+                call HideTrayIcon
+@@:             retn
 
 ;--------------------------------------------------------------------------;
 

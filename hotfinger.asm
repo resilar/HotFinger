@@ -82,6 +82,21 @@ proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
                 ; Parse command-line arguments
                 call CommandLineInterface
 
+                ; Focus existing window
+                push NULL
+                push gui.szClassName
+                call [FindWindowA]
+                test eax, eax
+                jz .not_found
+                push NULL
+                push NULL
+                push WM_NUDGE
+                push eax
+                call [SendMessageA]
+                push 2
+                pop eax
+                ret
+.not_found:
                 ; Read settings
                 lea ebx, [ini]
                 push ebx
@@ -332,6 +347,7 @@ section '.idata' import readable
         DispatchMessageA, 'DispatchMessageA', \
         EnableWindow, 'EnableWindow', \
         EndDialog, 'EndDialog', \
+        FindWindowA, 'FindWindowA', \
         GetClientRect, 'GetClientRect', \
         GetCursorPos, 'GetCursorPos', \
         GetDlgItem, 'GetDlgItem', \
@@ -354,6 +370,7 @@ section '.idata' import readable
         SendDlgItemMessageA, 'SendDlgItemMessageA', \
         SendMessageA, 'SendMessageA', \
         SetFocus, 'SetFocus', \
+        SetForegroundWindow, 'SetForegroundWindow', \
         SetMenu, 'SetMenu', \
         SetWindowLongA, 'SetWindowLongA', \
         SetWindowTextA, 'SetWindowTextA', \
