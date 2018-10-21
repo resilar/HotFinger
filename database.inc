@@ -33,201 +33,173 @@ struct WBIOSVC_DATABASE
   dwInitialSize      dd ?
 ends
 
-; pSensor:WBIOSVC_SENSOR
-proc ReadWbiosvcSensorKey hKey:DWORD, pSensor:DWORD
+; Common prologue/epilogue for the 4 functions below:
+;proc ReadWbiosvcSensorKey hKey:DWORD, pSensor:DWORD
+;proc ReadWbiosvcDatabaseKey hKey:DWORD, pDatabase:DWORD
+;proc SaveWbiosvcSensorKey hKey:DWORD, pSensor:DWORD
+;proc SaveWbiosvcDatabaseKey hKey:DWORD, pDatabase:DWORD
+ReadSaveWrapper:
+.prologue:      pop eax
                 push ebx
-                push esi
-                push edi
-
-                mov ebx, [hKey]
-                mov edi, [pSensor]
-                ;add edi, WBIOSVC_SENSOR.guidDatabaseId ; offset 0
-                mov esi, database.szDatabaseId
-                call Regaux.getGuid
-                jc .error
-
-                mov esi, database.szSensorMode
-                call Regaux.getDword
-                jc .error
-
-                mov esi, database.szSystemSensor
-                call Regaux.getDword
-                jc .error
-
-                mov esi, database.szEngineAdapterBinary
-                mov ecx, MAX_PATH
-                call Regaux.getSz
-                jc .error
-
-                mov esi, database.szSensorAdapterBinary
-                call Regaux.getSz
-                jc .error
-
-                mov esi, database.szStorageAdapterBinary
-                call Regaux.getSz
-                jc .error
-
-                xor eax, eax
-                inc eax
-.finish:        pop edi
-                pop esi
-                pop ebx
-                ret
-.error:         xor eax, eax
-                jmp .finish
-endp
-
-; pDatabase:WBIOSVC_DATABASE
-proc ReadWbiosvcDatabaseKey hKey:DWORD, pDatabase:DWORD
-                push ebx
-                push esi
-                push edi
-
-                mov ebx, [hKey]
-                mov edi, [pDatabase]
-                ;add edi, WBIOSVC_DATABASE.dwAttributes ; offset 0
-                mov esi, database.szAttributes
-                call Regaux.getDword
-                jc .error
-
-                mov esi, database.szAutoCreate
-                call Regaux.getDword
-                jc .error
-
-                mov esi, database.szAutoName
-                call Regaux.getDword
-                jc .error
-
-                mov esi, database.szBiometricType
-                call Regaux.getDword
-                jc .error
-
-                mov esi, database.szConnectionString
-                mov ecx, WINBIO_MAX_STRING_LEN
-                call Regaux.getSz
-                jc .error
-
-                mov esi, database.szFilePath
-                mov ecx, MAX_PATH
-                call Regaux.getSz
-                jc .error
-
-                mov esi, database.szFormat
-                call Regaux.getGuid
-                jc .error
-
-                mov esi, database.szInitialSize
-                call Regaux.getDword
-                jc .error
-
-                xor eax, eax
-                inc eax
-.finish:        pop edi
-                pop esi
-                pop ebx
-                ret
-.error:         xor eax, eax
-                jmp .finish
-endp
-
-; pSensor:WBIOSVC_SENSOR
-proc SaveWbiosvcSensorKey hKey:DWORD, pSensor:DWORD
-                push ebx
-                push esi
-                push edi
-                mov ebx, [hKey]
-                mov edi, [pSensor]
-
-                mov esi, database.szDatabaseId
-                call Regaux.setGuid
-                jc .error
-
-                mov esi, database.szSensorMode
-                call Regaux.setDword
-                jc .error
-
-                mov esi, database.szSystemSensor
-                call Regaux.setDword
-                jc .error
-
-                mov esi, database.szEngineAdapterBinary
-                mov ecx, MAX_PATH
-                call Regaux.setSz
-                jc .error
-
-                mov esi, database.szSensorAdapterBinary
-                call Regaux.setSz
-                jc .error
-
-                mov esi, database.szStorageAdapterBinary
-                call Regaux.setSz
-                jc .error
-
-                xor eax, eax
-.finish:        pop edi
-                pop esi
-                pop ebx
-                ret
-.error:         xor eax, eax
-                inc eax
-                jmp .finish
-endp
-
-; pDatabase:WBIOSVC_DATABASE
-proc SaveWbiosvcDatabaseKey hKey:DWORD, pDatabase:DWORD
-                push ebx
-                push esi
-                push edi
+                mov ebx, [esp+4h+4h+0] ; [arg0]
                 push ebp
-                mov ebx, [hKey]
-                mov edi, [pDatabase]
-                mov ebp, Regaux.setDword
+                mov ebp, Regaux.getDword
+                push esi
+                mov esi, database.szDatabaseId
+                push edi
+                mov edi, [esp+10h+4h+4h] ; [arg1]
 
-                ;add edi, WBIOSVC_DATABASE.dwAttributes ; offset 0
-                mov esi, database.szAttributes
-                call ebp
-                jc .error
+                call eax
 
-                mov esi, database.szAutoCreate
-                call ebp
-                jc .error
-
-                mov esi, database.szAutoName
-                call ebp
-                jc .error
-
-                mov esi, database.szBiometricType
-                call ebp
-                jc .error
-
-                mov esi, database.szConnectionString
-                mov ecx, WINBIO_MAX_STRING_LEN
-                call Regaux.setSz
-                jc .error
-
-                mov esi, database.szFilePath
-                mov ecx, MAX_PATH
-                call Regaux.setSz
-                jc .error
-
-                mov esi, database.szFormat
-                call Regaux.setGuid
-                jc .error
-
-                mov esi, database.szInitialSize
-                call ebp
-                jc .error
-
-                xor eax, eax
-.finish:        pop ebp
+.epilogue:      sbb eax, eax
+                inc eax
                 pop edi
                 pop esi
+                pop ebp
                 pop ebx
-                ret
-.error:         push 2
-                pop eax
-                jmp .finish
-endp
+                retn 8h
+
+; pSensor:WBIOSVC_SENSOR
+;proc ReadWbiosvcSensorKey hKey:DWORD, pSensor:DWORD
+ReadWbiosvcSensorKey:
+                call ReadSaveWrapper
+                ;mov ebx, [hKey]
+                ;mov ebp, Regaux.getDword
+                ;mov esi, database.szDatabaseId
+                ;mov edi, [pSensor]
+
+                ;add edi, WBIOSVC_SENSOR.guidDatabaseId ; offset 0
+                call Regaux.getGuid
+
+                ;mov esi, database.szSensorMode
+                call ebp
+
+                ;mov esi, database.szSystemSensor
+                call ebp
+
+                add ebp, Regaux.getSz - Regaux.getDword
+                ;mov esi, database.szEngineAdapterBinary
+                mov ecx, MAX_PATH
+                call ebp
+
+                ;mov esi, database.szSensorAdapterBinary
+                call ebp
+
+                ;mov esi, database.szStorageAdapterBinary
+                call ebp
+
+                retn
+
+; pDatabase:WBIOSVC_DATABASE
+;proc ReadWbiosvcDatabaseKey hKey:DWORD, pDatabase:DWORD
+ReadWbiosvcDatabaseKey:
+                call ReadSaveWrapper
+
+                ;mov ebx, [hKey]
+                ;mov ebp, Regaux.getDword
+                ;mov esi, database.szAttributes
+                add esi, database.szAttributes - database.szDatabaseId
+                ;mov edi, [pDatabase]
+
+                ;add edi, WBIOSVC_DATABASE.dwAttributes ; offset 0
+                call ebp
+
+                ;mov esi, database.szAutoCreate
+                call ebp
+
+                ;mov esi, database.szAutoName
+                call ebp
+
+                ;mov esi, database.szBiometricType
+                call ebp
+
+                ;mov esi, database.szConnectionString
+                mov ecx, WINBIO_MAX_STRING_LEN
+                add ebp, Regaux.getSz - Regaux.getDword
+                call ebp
+
+                ;mov esi, database.szFilePath
+                ;mov ecx, WINBIO_MAX_STRING_LEN
+                call ebp
+
+                ;mov esi, database.szFormat
+                call Regaux.getGuid
+
+                ;mov esi, database.szInitialSize
+                call Regaux.getDword
+
+                retn
+
+; pSensor:WBIOSVC_SENSOR
+;proc SaveWbiosvcSensorKey hKey:DWORD, pSensor:DWORD
+SaveWbiosvcSensorKey:
+                call ReadSaveWrapper
+
+                ;mov ebx, [hKey]
+                ;mov ebp, Regaux.setDword
+                add ebp, Regaux.setDword - Regaux.getDword
+                ;mov esi, database.szDatabaseId
+                ;mov edi, [pSensor]
+
+                call Regaux.setGuid
+
+                ;mov esi, database.szSensorMode
+                call ebp
+
+                ;mov esi, database.szSystemSensor
+                call ebp
+
+                add ebp, Regaux.setSz - Regaux.setDword
+                ;mov esi, database.szEngineAdapterBinary
+                mov ecx, MAX_PATH
+                call ebp
+
+                ;mov esi, database.szSensorAdapterBinary
+                call ebp
+
+                ;mov esi, database.szStorageAdapterBinary
+                call ebp
+
+                retn
+
+; pDatabase:WBIOSVC_DATABASE
+;proc SaveWbiosvcDatabaseKey hKey:DWORD, pDatabase:DWORD
+SaveWbiosvcDatabaseKey:
+                call ReadSaveWrapper
+                ;mov ebx, [hKey]
+                ;mov ebp, Regaux.setDword
+                add ebp, Regaux.setDword - Regaux.getDword
+                ;mov esi, database.szAttributes
+                add esi, database.szAttributes - database.szDatabaseId
+                ;mov edi, [pDatabase]
+
+                ;add edi, WBIOSVC_DATABASE.dwAttributes ; offset 0
+                call ebp
+
+                ;mov esi, database.szAutoCreate
+                call ebp
+
+                ;mov esi, database.szAutoName
+                call ebp
+
+                ;mov esi, database.szBiometricType
+                call ebp
+
+                ;mov esi, database.szConnectionString
+                mov ecx, WINBIO_MAX_STRING_LEN
+                call Regaux.setSz
+
+                ;mov esi, database.szFilePath
+                mov ecx, MAX_PATH
+                call Regaux.setSz
+
+                ;mov esi, database.szFormat
+                call Regaux.setGuid
+
+                ;mov esi, database.szInitialSize
+                call ebp
+
+                retn
 
 ;-------------------------------------------------------------------------;
 ; Iterate WinBio sensor configuration keys for (all) device instances.
@@ -1118,16 +1090,19 @@ endp
 ;--------------------------------------------------------------------------;
 ; Auxiliary fastcall functions for manipulating Windows registry keys.
 ; ebx = hKey, esi = szValueName, edi = buffer, ecx = len (if applicable).
-; Upon return, edi = edi + ecx and CF=1 indicates an error.
+; Upon return, edi = edi + ecx, esi = esi + strlen(esi)+1 and CF=1 indicates
+; an error.
 ;--------------------------------------------------------------------------;
 Regaux:
 .getGuid:       virtual at esp
                   .szGuid db 39 dup (?)
                   .pad0   db ?
                   .allocaSize = $ - $$
+                  .ecx    dd ?
                 end virtual
+                push ecx
                 sub esp, .allocaSize
-                lea eax, [.szGuid]
+                mov eax, esp;lea eax, [.szGuid]
                 push 39
                 push esp
                 push eax
@@ -1143,21 +1118,31 @@ Regaux:
                 cmp eax, 37
                 jz @f
                 cmp eax, 39
+                clc
                 jnz .getGuid.error
-@@:             lea eax, [.szGuid]
+@@:             mov eax, esp ;lea eax, [.szGuid]
                 push edi
                 push eax
                 call StringToGuid
+
                 test eax, eax
                 jz .getGuid.error
-                clc
-.getGuid.done:  lea edi, [edi + 16]
-                lea esp, [esp + .allocaSize]
+@@:             lodsb
+                test al, al
+                jnz @b
+                add edi, 16
+                stc
+.getGuid.error: cmc
+.getGuid.done:  lea esp, [esp + .allocaSize]
+                jnc @f
+                pop dword [esp]
+@@:             pop ecx
                 retn
-.getGuid.error: stc
-                jmp .getGuid.done
+
+;--------------------------------------------------------------------------;
 
 .getSz:         push ecx
+
                 push ecx
                 push esp
                 push edi
@@ -1168,15 +1153,26 @@ Regaux:
                 push NULL
                 push ebx
                 call [RegGetValueA]
+
                 test eax, eax
-                pop eax
-                clc
-                jz @f
+                pop edx
+                jnz .getSz.error
+@@:             lodsb
+                test al, al
+                jnz @b
+                add edi, edx
                 stc
+.getSz.error:   cmc
+.getSz.done:    jnc @f
+                pop dword [esp]
 @@:             pop ecx
                 retn
 
-.getDword:      push 4
+;--------------------------------------------------------------------------;
+
+.getDword:      push ecx
+
+                push 4
                 push esp
                 push edi
                 push 0
@@ -1185,35 +1181,46 @@ Regaux:
                 push NULL
                 push ebx
                 call [RegGetValueA]
+
                 test eax, eax
-                pop eax
-                clc
-                jz @f
+                pop edx
+                jnz .getDword.err
+@@:             lodsb
+                test al, al
+                jnz @b
+                add edi, edx
                 stc
-@@:             lea edi, [edi + 4]
+.getDword.err:  cmc
+.getDword.done: jnc @f
+                pop dword [esp]
+@@:             pop ecx
                 retn
 
 ;--------------------------------------------------------------------------;
 
-.setGuid39:     push 0  ; without braces
+.setGuid39:     push 1  ; with braces
                 jmp @f
-.setGuid:       push 1  ; with braces
-@@:             ;virtual at esp
-                ;  .szGuid db 39 dup (?)
-                ;  .pad0   db ?
-                ;  .allocaSize = $ - $$
-                ;end virtual
+.setGuid:       push 0  ; without braces
+@@:             virtual at esp
+                  .szGUID db 39 dup (?)
+                  .pad1   db ?
+                  .allocaSize = $ - $$
+                  .braces dd ?
+                  .esp    dd ?
+                end virtual
+                push dword [esp]
+                mov [esp+4], ecx
                 sub esp, .allocaSize
 
                 push esp
                 push edi
                 call GuidToString
 
-                mov edx, esp
-                add edx, [esp + .allocaSize]
-                sub eax, edx
-                lea ecx, [39+2*eax]
-                mov byte [esp+ecx], 0
+                mov eax, [.braces]
+                lea ecx, [36+1+2*eax]
+                xor eax, 1
+                lea edx, [esp+eax] ;lea edx, [.szGUID]
+                mov byte [edx+ecx-1], 0
 
                 push ecx
                 push edx
@@ -1222,14 +1229,22 @@ Regaux:
                 push esi
                 push ebx
                 call [RegSetValueExA]
+
                 test eax, eax
-                clc
-                jz @f
+                jnz .setGuid.error
+@@:             lodsb
+                test al, al
+                jnz @b
+                add edi, 16
                 stc
-@@:
-                lea edi, [edi + 16]
-                lea esp, [esp + .allocaSize + 4]
+.setGuid.error: cmc
+.setGuid.done:  lea esp, [esp + .allocaSize + 4]
+                jnc @f
+                pop dword [esp]
+@@:             pop ecx
                 retn
+
+;--------------------------------------------------------------------------;
 
 .setSz:         push ecx
                 mov eax, ecx            ; store max length to eax
@@ -1239,6 +1254,7 @@ Regaux:
                 jnz @b
 
                 push ecx
+                push ecx
                 push edi
                 add edi, eax
                 push REG_SZ
@@ -1246,23 +1262,41 @@ Regaux:
                 push esi
                 push ebx
                 call [RegSetValueExA]
+
                 test eax, eax
-                clc
-                jz @f
+                pop edx
+                jnz .setSz.error
+@@:             lodsb
+                test al, al
+                jnz @b
+                add edi, edx
                 stc
+.setSz.error:   cmc
+.setSz.done:    jnc @f
+                pop dword [esp]
 @@:             pop ecx
                 retn
 
-.setDword:      push 4
+;--------------------------------------------------------------------------;
+
+.setDword:      push ecx
+                push 4
                 push edi
                 push REG_DWORD
                 push 0
                 push esi
                 push ebx
                 call [RegSetValueExA]
-                add edi, 4
+
                 test eax, eax
-                clc
-                jz @f
+                jnz .setDword.err
+@@:             lodsb
+                test al, al
+                jnz @b
+                add edi, 4
                 stc
-@@:             retn
+.setDword.err:  cmc
+.setDword.done: jnc @f
+                pop dword [esp]
+@@:             pop ecx
+                retn
