@@ -571,8 +571,6 @@ proc InstallDatabaseForSensor guid:DWORD, wszDeviceInstanceId:DWORD
                 push edi
                 sub esp, .allocaSize
                 mov ebp, [.user]
-                cmp [dwFound], 0
-                jnz .exit
 
                 ; Detemine configuration key (max + 1)
                 mov eax, [.config]
@@ -581,6 +579,10 @@ proc InstallDatabaseForSensor guid:DWORD, wszDeviceInstanceId:DWORD
                 inc eax
                 mov [dwConfigId], eax
 @@:
+                ; Skip if suitable system sensor has been already found
+                cmp [dwFound], 0
+                jnz .exit
+
                 ; We are interested only in system sensors ...
                 mov ecx, [.hKey]
                 push NULL
