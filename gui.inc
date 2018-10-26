@@ -1171,7 +1171,13 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call [MessageBoxA]
                 jmp .winbio_done
 
-.sensor_404:    push MB_ICONERROR or MB_OK
+.sensor_404:    push NULL
+                push NULL
+                push WM_NUDGE
+                push [hwnd]
+                call [SendMessageA]
+
+                push MB_ICONERROR or MB_OK
                 push gui.szError
                 push gui.szSensor404Error
                 push [hwnd]
