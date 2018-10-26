@@ -265,8 +265,6 @@ section '.idata' import readable
           user32, 'user32.dll', \
           winbio, 'winbio.dll'
 
-  include 'winbio32api.inc'
-
   import advapi32, \
          CloseServiceHandle, 'CloseServiceHandle', \
          ControlService, 'ControlService', \
@@ -386,6 +384,23 @@ section '.idata' import readable
         TranslateMessage, 'TranslateMessage', \
         UpdateWindow, 'UpdateWindow', \
         wsprintfA, 'wsprintfA'
+
+  import winbio, \
+        WinBioAsyncEnumBiometricUnits, 'WinBioAsyncEnumBiometricUnits', \
+        WinBioAsyncOpenFramework, 'WinBioAsyncOpenFramework', \
+        WinBioAsyncOpenSession, 'WinBioAsyncOpenSession', \
+        WinBioCancel,'WinBioCancel', \
+        WinBioCloseFramework, 'WinBioCloseFramework', \
+        WinBioCloseSession, 'WinBioCloseSession', \
+        WinBioEnrollBegin, 'WinBioEnrollBegin', \
+        WinBioEnrollCapture, 'WinBioEnrollCapture', \
+        WinBioEnrollCommit, 'WinBioEnrollCommit', \
+        WinBioEnrollDiscard, 'WinBioEnrollDiscard', \
+        WinBioEnumBiometricUnits, 'WinBioEnumBiometricUnits', \
+        WinBioFree, 'WinBioFree', \
+        WinBioIdentify, 'WinBioIdentify', \
+        WinBioLocateSensor, 'WinBioLocateSensor', \
+        WinBioWait, 'WinBioWait'
 
 section '.rsrc' resource data readable
 
