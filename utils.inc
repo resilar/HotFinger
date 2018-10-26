@@ -2,6 +2,21 @@
 ; Miscellaneous utilities
 ;-------------------------------------------------------------------------;
 
+SERVICE_ALL_ACCESS   = 0f01ffh
+SERVICE_CONTROL_STOP = 1
+SERVICE_STOPPED      = 1
+SERVICE_RUNNING      = 4
+
+struct SERVICE_STATUS
+  dwServiceType             dd ?
+  dwCurrentState            dd ?
+  dwControlsAccepted        dd ?
+  dwWin32ExitCode           dd ?
+  dwServiceSpecificExitCode dd ?
+  dwCheckPoint              dd ?
+  dwWaitHint                dd ?
+ends
+
 ;--------------------------------------------------------------------------;
 ; GUID strings
 ;--------------------------------------------------------------------------;
@@ -190,6 +205,53 @@ atoi:           push ebx
                 retn
 
 ;--------------------------------------------------------------------------;
+; Subfactor text functions
+;--------------------------------------------------------------------------;
+
+proc SubfactorText dwSubfactor:DWORD
+                mov eax, [dwSubfactor]
+                cmp eax, 10
+                jbe @f
+                xor eax, eax
+@@:             mov eax, [utils.pszSubfactorTable + eax*4]
+                ret
+endp
+
+proc SubfactorFullText dwSubfactor:DWORD
+                mov eax, [dwSubfactor]
+                cmp eax, 10
+                jbe @f
+                xor eax, eax
+@@:             mov eax, [utils.pszSubfactorFullTable + eax*4]
+                ret
+endp
+
+proc SubfactorSimpleText dwSubfactor:DWORD
+                push [dwSubfactor]
+                call SubfactorText
+                cmp [eax+1], ' '
+                jnz @f
+                add eax, 2
+@@:             ret
+endp
+
+;--------------------------------------------------------------------------;
+; WinBio error strings
+;--------------------------------------------------------------------------;
+
+;proc WinBioErrorText dwErrorCode:DWORD
+WinBioErrorText:
+                mov eax, [esp + 4]
+                sub eax, WINBIO_E_MIN
+                jz .no_winbio_err
+                cmp eax, WINBIO_E_MAX - WINBIO_E_MIN
+                ja .no_winbio_err
+                mov eax, [utils.pszErrorTextTable + eax*4]
+                retn 4
+.no_winbio_err: xor eax, eax
+                retn 4
+
+;--------------------------------------------------------------------------;
 ; Run command as admin with ShellExecuteW
 ;--------------------------------------------------------------------------;
 
@@ -254,48 +316,102 @@ proc RunAsAdmin wszParameters:DWORD, hwndParent:DWORD
 endp
 
 ;--------------------------------------------------------------------------;
-; Subfactor text functions
+; WbioSrvc restart needed, for example, after registering a new database-
 ;--------------------------------------------------------------------------;
 
-proc SubfactorText dwSubfactor:DWORD
-                mov eax, [dwSubfactor]
-                cmp eax, 10
-                jbe @f
+WbioSrvcRestart:
+                virtual at ebp
+                  .status SERVICE_STATUS ?
+                  .counter dd ?
+                  .allocaSize = $ - $$
+                end virtual
+                push ebp
+                sub esp, .allocaSize
+                mov ebp, esp
                 xor eax, eax
-@@:             mov eax, [utils.pszSubfactorTable + eax*4]
-                ret
-endp
+                push eax ; [.rc]
 
-proc SubfactorFullText dwSubfactor:DWORD
-                mov eax, [dwSubfactor]
-                cmp eax, 10
-                jbe @f
+                push GENERIC_EXECUTE
+                push utils.szSERVICES_ACTIVE_DATABASE
+                push eax
+                call [OpenSCManagerA]
+                test eax, eax
+                jz .fail_manager
+
+                push eax ; For CloseServiceHandle
+
+                push SERVICE_ALL_ACCESS
+                push utils.szWbioSrvc
+                push eax
+                call [OpenServiceA]
+                test eax, eax
+                jz .fail_service
+
+                push ebx
+                mov ebx, eax
+
+                ; Stop the service
+                push -1
+                pop [.counter]
+.stop_service:  push ebp
+                push ebx
+                call [QueryServiceStatus]
+                test eax, eax
+                jz .fail
+                cmp [ebp + SERVICE_STATUS.dwCurrentState], SERVICE_STOPPED
+                jz .restart
+
+                inc [.counter]
+                jz .request_stop
+                cmp [.counter], 10
+                jae .fail
+
+                push 100
+                call [Sleep]
+                jmp .stop_service
+
+.request_stop:  push ebp
+                push SERVICE_CONTROL_STOP
+                push ebx
+                call [ControlService]
+                test eax, eax
+                jz .fail
+                jmp .stop_service
+
+.restart:       ; Restart the service
                 xor eax, eax
-@@:             mov eax, [utils.pszSubfactorFullTable + eax*4]
-                ret
-endp
+                mov [.counter], eax
 
-proc SubfactorSimpleText dwSubfactor:DWORD
-                push [dwSubfactor]
-                call SubfactorText
-                cmp [eax+1], ' '
-                jnz @f
-                add eax, 2
-@@:             ret
-endp
+                push eax ; NULL
+                push eax ; 0
+                push ebx
+                call [StartServiceA]
+                test eax, eax
+                jz .fail
 
-;--------------------------------------------------------------------------;
-; WinBio error strings
-;--------------------------------------------------------------------------;
+.query_restart: push ebp
+                push ebx
+                call [QueryServiceStatus]
+                test eax, eax
+                jz .fail
+                cmp [ebp + SERVICE_STATUS.dwCurrentState], SERVICE_RUNNING
+                jz .restarted
 
-;proc WinBioErrorText dwErrorCode:DWORD
-WinBioErrorText:
-                mov eax, [esp + 4]
-                sub eax, WINBIO_E_MIN
-                jz .no_winbio_err
-                cmp eax, WINBIO_E_MAX - WINBIO_E_MIN
-                ja .no_winbio_err
-                mov eax, [utils.pszErrorTextTable + eax*4]
-                retn 4
-.no_winbio_err: xor eax, eax
-                retn 4
+                inc [.counter]
+                jz .request_stop
+                cmp [.counter], 10
+                jae .fail
+
+                push 100
+                call [Sleep]
+                jmp .query_restart
+.restarted:
+
+                mov dword [esp+8], 1 ; mov [.rc], eax
+.fail:          xchg [esp], ebx
+                call [CloseServiceHandle]
+.fail_service:  call [CloseServiceHandle]
+.fail_manager:  pop eax ; mov eax, [.rc]
+                add esp, .allocaSize
+                pop ebp
+                retn

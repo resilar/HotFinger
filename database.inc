@@ -800,6 +800,10 @@ proc InstallDatabaseForSensor guid:DWORD, wszDeviceInstanceId:DWORD
                 push [hSensorKey]
                 call [RegCloseKey]
                 call [RegCloseKey]
+
+                ; WinBio service restart required to use the registered database
+                call WbioSrvcRestart
+
                 xor eax, eax
 .finish:        pop edi
                 pop esi

@@ -187,9 +187,6 @@ utils:
 ; GUID wsprintfA format
 .szGuidFormat db '{%08X-%04X-%04X-%02X%02X-%02X%02X%02X%02X%02X%02X}',0
 
-align 2
-.wszRunAs           du 'runas',0
-
 ; ASCII digit to integer value table (80h indicates bad digit)
 align 16
 .asciiDigitValueTable:
@@ -431,3 +428,10 @@ align 4
   dd .szCALIBRATION_BUFFER_TOO_SMALL
   dd .szCALIBRATION_BUFFER_TOO_LARGE
   dd .szCALIBRATION_BUFFER_INVALID
+
+align 2
+.wszRunAs du 'runas',0
+
+.szSERVICES_ACTIVE_DATABASE db 'ServicesActive',0
+
+.szWbioSrvc db 'WbioSrvc',0

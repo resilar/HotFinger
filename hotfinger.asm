@@ -268,6 +268,11 @@ section '.idata' import readable
   include 'winbio32api.inc'
 
   import advapi32, \
+         CloseServiceHandle, 'CloseServiceHandle', \
+         ControlService, 'ControlService', \
+         OpenSCManagerA, 'OpenSCManagerA', \
+         OpenServiceA, 'OpenServiceA', \
+         QueryServiceStatus, 'QueryServiceStatus', \
          RegCloseKey, 'RegCloseKey', \
          RegCreateKeyExA, 'RegCreateKeyExA', \
          RegDeleteKeyA, 'RegDeleteKeyA', \
@@ -276,7 +281,8 @@ section '.idata' import readable
          RegGetValueA, 'RegGetValueA', \
          RegOpenKeyExA, 'RegOpenKeyExA', \
          RegOpenKeyExW, 'RegOpenKeyExW', \
-         RegSetValueExA, 'RegSetValueExA'
+         RegSetValueExA, 'RegSetValueExA', \
+         StartServiceA, 'StartServiceA'
 
   import comctl32, \
          DefSubclassProc, 'DefSubclassProc', \
@@ -311,6 +317,7 @@ section '.idata' import readable
          LocalFree, 'LocalFree', \
          MulDiv, 'MulDiv', \
          RemoveDirectoryA, 'RemoveDirectoryA', \
+         Sleep, 'Sleep', \
          WaitForSingleObject, 'WaitForSingleObject', \
          WritePrivateProfileStringA, 'WritePrivateProfileStringA', \
          lstrcmpW, 'lstrcmpW', \
