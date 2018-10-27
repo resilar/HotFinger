@@ -228,26 +228,47 @@ proc ReadAppDataSettings pSettings:DWORD
                 retn
 
 .get_str:       ; ecx = size, ebx = section, esi = key, [szPath]
-                ; Output: edu = str, edu = edi + ecx, esi = key + strlen(esi)+1
+                ; Output: edi = str, edi = edi + ecx, esi = key + strlen(esi)+1
                 push ecx
                 push edx
-
-                lea eax, [szPath]
-                push eax
-                push ecx
-                push edi
-                push NULL
                 push esi
+                push edi
+
+                lea edx, [ecx+4]
+                and edx, not 3
+                mov ecx, esp
+                sub esp, edx
+                mov eax, esi
+                mov esi, esp
+                push ecx
+
+                lea ecx, [szPath]
+                push ecx
+                push edx
+                push esi
+                push NULL
+                push eax
                 push ebx
+                call [GetPrivateProfileStringA]
+
+                ; Strip semicolon
+                mov ecx, eax
+                jecxz @f
+                cmp byte [esi + ecx - 1], ';'
+                jnz @f
+                mov byte [esi + ecx - 1], 0
+@@:             rep movsb
+
+                pop esp
+                pop edi
+                pop esi
+                pop edx
+                pop ecx
 
 @@:             lodsb
                 test al, al
                 jnz @b
 
-                call [GetPrivateProfileStringA]
-
-                pop edx
-                pop ecx
                 add edi, ecx
                 retn
 endp
@@ -370,16 +391,39 @@ proc WriteAppDataSettings pSettings:DWORD
                 push ecx
                 push edx
 
+                lea edx, [ecx+4]
+                and edx, not 3
+                mov ecx, esp
+                sub esp, edx
+                mov edx, esp
+                push ecx
+
+                ; Escape by appending semicolon
+                push esi
+                push edi
+                mov esi, eax
+                mov edi, edx
+@@:             lodsb
+                test al, al
+                jz @f
+                stosb
+                jmp @b
+@@:             mov al, ';'
+                stosb
+                xor al, al
+                stosb
+                pop edi
+                pop esi
+
                 lea ecx, [szPath]
                 push ecx
-                push eax
+                push edx
                 push edi
+                repnz scasb
                 push ebx
                 call [WritePrivateProfileStringA]
 
-                xor eax, eax
-                repnz scasb
-
+                pop esp
                 pop edx
                 pop ecx
                 pop eax
