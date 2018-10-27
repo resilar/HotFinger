@@ -377,8 +377,7 @@ proc InitSensorListHeader hdlg:DWORD
                 mov [column.pszText], edi
                 scasb
                 jz .done
-                xor ecx, ecx
-                not ecx
+                lea ecx, [eax-1]
                 repnz scasb
                 not ecx
 

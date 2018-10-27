@@ -127,7 +127,7 @@ CONTEXT_FIRST_WINDOW_OFFSET = CONTEXT.winList
 CONTEXT_WINDOW_COUNT = (sizeof.CONTEXT - CONTEXT_FIRST_WINDOW_OFFSET)/sizeof.WIN
 
 proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
-                local buf[MAX_PATH]:BYTE
+                local buf[MAX_PATH+4]:BYTE
                 local ofn:OPENFILENAME
 
                 push ebx
@@ -764,25 +764,42 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 pop [ofn.hInstance]
                 pop [ofn.hwndOwner]
 
-                lea edi, [buf]
+                lea edi, [buf+1]
                 mov [ofn.lpstrFile], edi
                 mov [ofn.nMaxFile], MAX_PATH
-                stosb
+                mov byte [edi], 0
                 mov [ofn.lpstrFilter], gui.szBrowseFilter
                 mov [ofn.nFilterIndex], 1
                 mov [ofn.Flags], OFN_PATHMUSTEXIST or OFN_FILEMUSTEXIST
 
                 call [GetOpenFileNameA]
                 test eax, eax
+                jnz .opened
                 pop edi
-                jz .exit
+                jmp .exit
 
-                mov eax, [ofn.lpstrFile]
-                push eax
+.opened:        xor eax, eax
+                lea ecx, [eax-1] ; -1
+                push edi ; for SendMessageA
+                repnz scasb
+                not ecx
+                dec ecx ; strlen(edi)
+                jz .unquoted
+                mov al, ' '
+                mov edi, [esp]
+                repnz scasb
+                jnz .unquoted
+                mov byte [edi+ecx], '"'
+                mov byte [edi+ecx+1], 0
+                mov byte [buf], '"'
+                dec dword [esp]
+.unquoted:
                 push 0
                 push WM_SETTEXT
                 push [ebx + CONTEXT.winPath.hwnd]
                 call [SendMessageA]
+
+                pop edi
                 retn
 
 .IDC_ENROLL:    call .get_ebx_ctx
@@ -1671,7 +1688,8 @@ proc GetCommand iItem:DWORD
 endp
 
 proc RunSubFactorCommand dwSubFactor:DWORD
-                local pszCommand:DWORD
+                push esi
+                push edi
 
                 mov eax, [dwSubFactor]
                 dec eax
@@ -1681,26 +1699,66 @@ proc RunSubFactorCommand dwSubFactor:DWORD
                 push eax
                 call GetCommand
                 test eax, eax
-                mov [pszCommand], eax
                 jz .exit
-                push eax ; for [HeapFree]
-                cmp byte [eax], 0
+                push eax ; for HeapFree
+
+                mov esi, eax
+                mov edi, eax
+                xor eax, eax
+                lea ecx, [eax-1] ; -1
+                repnz scasb
+                not ecx
+                dec ecx ; strlen(esi)
                 jz .cleanup
+
+                ; Quotes?
+                dec ecx
+                lodsb
+                mov edi, esi
+                cmp al, '"'
+                jz .quotes
+
+                ; Unquoted
+                dec esi
+                mov al, ' '
+                cmp byte [esi], al
+                jz .no_params
+
+                ; Quoted
+.quotes:        repnz scasb
+                jnz .no_params
+                lea edx, [edi-1]
+                mov al, ' '
+                repz scasb
+                jz .no_params
+                dec edi
+                jmp .execute
+
+.no_params:     xor edi, edi
+
+.execute:       mov cl, byte [edx]
+                push ecx
+                mov byte [edx], 0
 
                 push SW_SHOWNORMAL
                 push NULL
-                push NULL
-                push eax
+                push edi
+                push esi
                 push gui.szOpen
                 push NULL
                 call [ShellExecuteA]
+
+                pop ecx
+                mov byte [edx], cl
 
 .cleanup:       ; push eax
                 push 0
                 call [GetProcessHeap]
                 push eax
                 call [HeapFree]
-.exit:          ret
+.exit:          pop edi
+                pop esi
+                ret
 endp
 
 proc UpdateSelection
