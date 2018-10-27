@@ -1128,6 +1128,7 @@ Regaux:
                 jnz .getGuid.error
 @@:             mov eax, esp ;lea eax, [.szGuid]
                 push edi
+                add edi, 16
                 push eax
                 call StringToGuid
 
@@ -1136,7 +1137,6 @@ Regaux:
 @@:             lodsb
                 test al, al
                 jnz @b
-                add edi, 16
                 stc
 .getGuid.error: cmc
 .getGuid.done:  lea esp, [esp + .allocaSize]
@@ -1159,14 +1159,13 @@ Regaux:
                 push NULL
                 push ebx
                 call [RegGetValueA]
+                pop ecx
 
                 test eax, eax
-                pop edx
                 jnz .getSz.error
 @@:             lodsb
                 test al, al
                 jnz @b
-                add edi, edx
                 stc
 .getSz.error:   cmc
 .getSz.done:    jnc @f
@@ -1181,20 +1180,20 @@ Regaux:
                 push 4
                 push esp
                 push edi
+                add edi, 4
                 push 0
                 push RRF_RT_REG_DWORD
                 push esi
                 push NULL
                 push ebx
                 call [RegGetValueA]
+                pop ecx
 
                 test eax, eax
-                pop edx
                 jnz .getDword.err
 @@:             lodsb
                 test al, al
                 jnz @b
-                add edi, edx
                 stc
 .getDword.err:  cmc
 .getDword.done: jnc @f
@@ -1220,6 +1219,7 @@ Regaux:
 
                 push esp
                 push edi
+                add edi, 16
                 call GuidToString
 
                 mov eax, [.braces]
@@ -1241,7 +1241,6 @@ Regaux:
 @@:             lodsb
                 test al, al
                 jnz @b
-                add edi, 16
                 stc
 .setGuid.error: cmc
 .setGuid.done:  lea esp, [esp + .allocaSize + 4]
@@ -1253,8 +1252,8 @@ Regaux:
 ;--------------------------------------------------------------------------;
 
 .setSz:         push ecx
-                mov eax, ecx            ; store max length to eax
-                xor ecx, ecx
+                xor eax, eax
+                xchg eax, ecx           ; store max length to eax
 @@:             cmp byte [edi+ecx], 0   ; calculate real length
                 lea ecx, [ecx+1]
                 jnz @b
@@ -1268,14 +1267,13 @@ Regaux:
                 push esi
                 push ebx
                 call [RegSetValueExA]
+                pop ecx
 
                 test eax, eax
-                pop edx
                 jnz .setSz.error
 @@:             lodsb
                 test al, al
                 jnz @b
-                add edi, edx
                 stc
 .setSz.error:   cmc
 .setSz.done:    jnc @f
@@ -1288,6 +1286,7 @@ Regaux:
 .setDword:      push ecx
                 push 4
                 push edi
+                add edi, 4
                 push REG_DWORD
                 push 0
                 push esi
@@ -1299,7 +1298,6 @@ Regaux:
 @@:             lodsb
                 test al, al
                 jnz @b
-                add edi, 4
                 stc
 .setDword.err:  cmc
 .setDword.done: jnc @f
