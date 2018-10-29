@@ -84,7 +84,7 @@ proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
 
                 ; Focus existing window
                 push NULL
-                push gui.szClassName
+                push hotfinger.szClassName
                 call [FindWindowA]
                 test eax, eax
                 jz .not_found
@@ -135,7 +135,7 @@ proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
                 mov [wc.hCursor], eax
 
                 mov [wc.hbrBackground], COLOR_BTNFACE+1
-                mov [wc.lpszClassName], gui.szClassName
+                mov [wc.lpszClassName], hotfinger.szClassName
 
                 lea eax, [wc]
                 push eax
@@ -144,8 +144,8 @@ proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
                 jnz .create_window
 
                 push MB_ICONERROR
-                push gui.szError
-                push gui.szWindowRegistrationFailed
+                push hotfinger.szError
+                push hotfinger.szWindowRegistrationFailed
                 push NULL
                 call [MessageBoxA]
                 jmp .die
@@ -169,17 +169,17 @@ proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
                 push eax ; x
 
                 push WS_OVERLAPPEDWINDOW
-                push gui.szCaption
-                push gui.szClassName
+                push hotfinger.szCaption
+                push hotfinger.szClassName
                 push 0
                 call [CreateWindowExA]
                 test eax, eax
                 jnz .show_window
 
                 push MB_ICONERROR
-                push gui.szError
-                push gui.szWindowCreationFailed
-                push NULL
+                push hotfinger.szError
+                push hotfinger.szWindowCreationFailed
+                push eax ; NULL
                 call [MessageBoxA]
                 jmp .die
 
@@ -201,7 +201,7 @@ proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
                 call ShowTrayIcon
 
 ;--------------------------------------------------------------------------;
-; Enter message loop
+; Message loop
 ;--------------------------------------------------------------------------;
 .msg_loop:      push 0
                 push 0
@@ -283,10 +283,7 @@ section '.idata' import readable
          StartServiceA, 'StartServiceA'
 
   import comctl32, \
-         DefSubclassProc, 'DefSubclassProc', \
-         InitCommonControlsEx, 'InitCommonControlsEx', \
-         RemoveWindowSubclass, 'RemoveWindowSubclass', \
-         SetWindowSubclass, 'SetWindowSubclass'
+         InitCommonControlsEx, 'InitCommonControlsEx'
 
   import comdlg32, \
          GetOpenFileNameA, 'GetOpenFileNameA'
@@ -317,6 +314,8 @@ section '.idata' import readable
          RemoveDirectoryA, 'RemoveDirectoryA', \
          Sleep, 'Sleep', \
          WaitForSingleObject, 'WaitForSingleObject', \
+         Wow64DisableWow64FsRedirection, 'Wow64DisableWow64FsRedirection', \
+         Wow64RevertWow64FsRedirection, 'Wow64RevertWow64FsRedirection', \
          WritePrivateProfileStringA, 'WritePrivateProfileStringA', \
          lstrcmpW, 'lstrcmpW', \
          lstrcmpiW, 'lstrcmpiW', \
@@ -325,7 +324,6 @@ section '.idata' import readable
 
   import ole32, \
          CoInitialize, 'CoInitialize', \
-         CoInitializeEx, 'CoInitializeEx', \
          CoUninitialize, 'CoUninitialize'
 
   import shell32, \
@@ -334,8 +332,7 @@ section '.idata' import readable
          SHGetFolderPathA, 'SHGetFolderPathA', \
          Shell_NotifyIconA, 'Shell_NotifyIconA', \
          ShellExecuteA, 'ShellExecuteA', \
-         ShellExecuteExW, 'ShellExecuteExW', \
-         ShellExecuteW, 'ShellExecuteW'
+         ShellExecuteExW, 'ShellExecuteExW'
 
   import shlwapi, \
          SHAutoComplete, 'SHAutoComplete'

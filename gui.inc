@@ -132,6 +132,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
                 push ebx
                 mov eax, [msg]
+                mov ebx, .get_ebx_ctx
                 push .exit_retn ; Return address
                 cmp eax, WM_CREATE
                 jz .WM_CREATE
@@ -227,11 +228,12 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 mov [ebx + CONTEXT.hFont], eax
 
                 ; Create statusbar
-                lea edi, [buf]
                 mov eax, [ebx + CONTEXT.pSettings]
-                lea esi, [eax + SETTINGS.vol.wszDeviceInstanceId]
                 mov ecx, MAX_PATH
-                push edi
+                sub esp, ecx
+                lea esi, [eax + SETTINGS.vol.wszDeviceInstanceId]
+                mov edi, esp
+                push esp
 @@:             lodsw
                 test ax, ax
                 jz @f
@@ -249,12 +251,12 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push ecx
                 push ecx
                 push WS_CHILD or WS_VISIBLE
-                ;push gui.szInfo
                 push eax
                 push gui.szStatusClass
                 push ecx
                 call [CreateWindowExA]
                 mov [ebx + CONTEXT.hwndStatus], eax
+                add esp, MAX_PATH
 
                 ; Create menu
                 call [CreateMenu]
@@ -582,13 +584,13 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
 ;-------------------------------------------------------------------------;
 
-.WM_DPICHANGED: call .get_ebx_ctx
-                push [hwnd]
+.WM_DPICHANGED: push [hwnd]
                 call [GetDpiForWindow]
+                call ebx ; .get_ebx_ctx
                 mov [ebx + CONTEXT.dwDPI], eax
                 retn
 
-.WM_SIZE:       call .get_ebx_ctx
+.WM_SIZE:       call ebx ; .get_ebx_ctx
                 push edi
                 push esi
                 mov eax, [lParam]
@@ -662,7 +664,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 .WM_SYSCOMMAND: mov eax, [wParam]
                 cmp eax, SC_MINIMIZE
                 jnz .default
-                call .get_ebx_ctx
+                call ebx ; .get_ebx_ctx
                 push [hwnd]
                 call ShowTrayIcon
                 test eax, eax
@@ -698,29 +700,25 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
                 jmp .exit
 
-.IDC_PATH:      call .get_ebx_ctx
-                push esi
+.IDC_PATH:      call ebx ; .get_ebx_ctx
 
                 push [lParam]
-                lea esi, [buf]
                 call [GetWindowTextLengthA]
-                inc eax           ; +1 for NULL byte
-                mov ecx, MAX_PATH ; sizeof.buf
-                cmp eax, ecx
-                jbe .path_buf_ok
-                xor esi, esi
+                inc eax ; +1 for NULL-terminator
+                push eax ; for GetWindowTextA
+
                 push eax
-                push esi
+                push 0
                 call [GetProcessHeap]
                 push eax
                 call [HeapAlloc]
                 test eax, eax
-                pop esi
-                jz .path_fail
-                xchg eax, esi
+                pop ecx
+                jz .path_oom
+                push eax ; for HeapFree
 
-.path_buf_ok:   push eax
-                push esi
+                push ecx
+                push eax
                 push [lParam]
                 call [GetWindowTextA]
 
@@ -732,23 +730,17 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 test eax, eax
                 js .path_fail
 
-                push esi
+                push dword [esp]
                 push eax
                 call SetCommand
 
-                lea eax, [buf]
-                cmp esi, eax
-                jz .path_changed
-                push esi
-                push 0
+.path_fail:     push 0
                 call [GetProcessHeap]
                 push eax
                 call [HeapFree]
-.path_fail:
-.path_changed:  pop esi
-                retn
+.path_oom:      retn
 
-.IDC_BROWSE:    call .get_ebx_ctx
+.IDC_BROWSE:    call ebx ; .get_ebx_ctx
 
                 xor eax, eax
                 push edi
@@ -774,9 +766,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
                 call [GetOpenFileNameA]
                 test eax, eax
-                jnz .opened
-                pop edi
-                jmp .exit
+                jz .browse_exit
 
 .opened:        xor eax, eax
                 lea ecx, [eax-1] ; -1
@@ -799,10 +789,10 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push [ebx + CONTEXT.winPath.hwnd]
                 call [SendMessageA]
 
-                pop edi
+.browse_exit:   pop edi
                 retn
 
-.IDC_ENROLL:    call .get_ebx_ctx
+.IDC_ENROLL:    call ebx ; .get_ebx_ctx
 
                 mov eax, [ebx + CONTEXT.dwState]
                 test eax, STATE_ENROLLING or STATE_ENROLL_REQUESTED or STATE_IDENTIFYING
@@ -853,7 +843,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push [hwnd]
                 call [MessageBoxA]
                 retn
-.uninstalled:   call .get_ebx_ctx
+.uninstalled:   call ebx ; .get_ebx_ctx
                 test ebx, ebx
                 jz @f
                 mov eax, [ebx + CONTEXT.pSettings]
@@ -900,24 +890,26 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 @@:             retn
 
 .LVN_ITEMCHANGED:
-                call .get_ebx_ctx
+                call ebx ; .get_ebx_ctx
                 call UpdateSelection
                 retn
 
 ;--------------------------------------------------------------------------;
 
-.WM_NUDGE:      push [hwnd]
-                push [hwnd]
+.WM_NUDGE:      mov eax, [hwnd]
+                push eax ; [hwnd]
+                push eax ; [hwnd]
                 push SW_SHOW
-                push [hwnd]
+                push eax ; [hwnd]
                 call [ShowWindow]
                 call [SetForegroundWindow]
                 call [SetFocus]
-                call .get_ebx_ctx
+                call ebx ; .get_ebx_ctx
                 mov eax, [ebx + CONTEXT.pSettings]
-                cmp [eax + SETTINGS.GUI.dwMinimized], 0
+                xor ecx, ecx
+                cmp [eax + SETTINGS.GUI.dwMinimized], ecx
                 jz @f
-                push 0
+                push ecx
                 pop [eax + SETTINGS.GUI.dwMinimized]
                 push [hwnd]
                 call HideTrayIcon
@@ -928,7 +920,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 .WM_TRAY:       mov edx, [lParam]
                 cmp edx, WM_LBUTTONDBLCLK ;WM_LBUTTONDOWN
                 jnz @f
-                call .get_ebx_ctx
+                call ebx ; .get_ebx_ctx
                 push [ebx + CONTEXT.win.hwnd]
                 call HideTrayIcon
                 mov eax, [ebx + CONTEXT.pSettings]
@@ -940,7 +932,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 @@:
                 cmp edx, WM_RBUTTONDOWN
                 jnz .default
-                call .get_ebx_ctx
+                call ebx ; .get_ebx_ctx
                 sub esp, sizeof.POINT
                 push esp
                 call [GetCursorPos]
@@ -959,15 +951,17 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call [TrackPopupMenu]
 
                 add esp, sizeof.POINT
-                retn
+.random_ret:    retn
 
 ;--------------------------------------------------------------------------;
 
-.WM_WINBIO:     push esi
-                mov esi, [lParam]
-                test esi, esi
-                jz .winbio_exit
-                call .get_ebx_ctx
+.WM_WINBIO:     call ebx ; .get_ebx_ctx
+                mov ecx, [lParam]
+                jecxz .random_ret
+                push ebp
+                mov ebp, esp
+                push esi
+                mov esi, ecx
 
                 mov eax, [esi + WINBIO_ASYNC_RESULT.dwOperation]
                 cmp eax, 07fh
@@ -984,19 +978,14 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call .start_identify
 
                 ;cmp eax, WINBIO_RPC_X_SS_IN_NULL_CONTEXT
-                ; TODO: WbioSvc restart solves this...
+                ; WbioSrvc restart solves this...
 
                 jmp .winbio_done
 
-.session_error: or [ebx + CONTEXT.dwState], STATE_ERROR
-                push MB_ICONERROR or MB_OK
-                push gui.szError
-                push gui.szSessionError
-                push [hwnd]
-                call [MessageBoxA]
-                push [hwnd]
+.session_error: push [ebx + CONTEXT.win.hwnd]
                 call [DestroyWindow]
-                jmp .winbio_done
+                mov edx, gui.szSessionError
+                jmp .winbio_error
 
 .id:            cmp al, WINBIO_OPERATION_IDENTIFY
                 jnz .enroll_begin
@@ -1022,42 +1011,34 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 retn
 
 .id_error:      sub esp, 60h
-                or [ebx + CONTEXT.dwState], STATE_ERROR
                 mov ecx, esp
-
                 push eax
                 push gui.szIdentifyError
                 push ecx
                 call [wsprintfA]
-
-                push MB_ICONERROR
-                push gui.szError
-                lea eax, [esp+4*3+4*2]
-                push eax
-                push [ebx + CONTEXT.win.hwnd]
-                call [MessageBoxA]
-
-                add esp, 60h + 4*3
-                jmp .winbio_done
+                mov edx, [esp]
+                ;add esp, 60h + 4*3 ; leave balances stack later
+                jmp .winbio_error
 
 .identified:    mov eax, [esi + WINBIO_ASYNC_RESULT.Identify.dwSubFactor]
                 push eax
                 push eax
                 call SetSelection
                 call RunSubFactorCommand
-
 .id_retry:      call .start_identify
                 jmp .winbio_done
 
 .enroll_begin:  cmp al, WINBIO_OPERATION_ENROLL_BEGIN
                 jnz .capture
-                push STATUS_ENROLLING
+.capture_more:  push STATUS_ENROLLING
                 call SetStatus
-                lea eax, [buf]
-                push eax
+                push 0
+                push esp
                 push [ebx + CONTEXT.hSession]
                 call [WinBioEnrollCapture]
+                pop eax
                 jmp .winbio_done
+
 .capture:       cmp al, WINBIO_OPERATION_ENROLL_CAPTURE
                 jnz .commit
                 mov eax, [esi + WINBIO_ASYNC_RESULT.dwApiStatus]
@@ -1068,18 +1049,8 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 cmp eax, WINBIO_E_BAD_CAPTURE
                 jz .capture_more
                 cmp eax, WINBIO_I_MORE_DATA
-                jnz .enroll_err
-.capture_more:  push STATUS_ENROLLING
-                call SetStatus
-                lea eax, [buf]
-                push eax
-                push [ebx + CONTEXT.hSession]
-                call [WinBioEnrollCapture]
-                jmp .winbio_done
-
-.enroll_cancel: push [ebx + CONTEXT.hSession]
-                call [WinBioEnrollDiscard]
-                jmp .winbio_done
+                jz .capture_more
+                ; jmp .enroll_err
 
 .enroll_err:    or [ebx + CONTEXT.dwState], STATE_ERROR
                 push eax
@@ -1089,22 +1060,25 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call SetStatus
                 jmp .winbio_done
 
-.enroll_ok:     sub esp, sizeof.WINBIO_IDENTITY + 4
+.enroll_cancel: push [ebx + CONTEXT.hSession]
+                call [WinBioEnrollDiscard]
+                jmp .winbio_done
+
+.enroll_ok:     sub esp, 4 + sizeof.WINBIO_IDENTITY
                 lea eax, [esp+4]
                 push esp
                 push eax
                 push [ebx + CONTEXT.hSession]
                 call [WinBioEnrollCommit]
                 test eax, eax
-                lea esp, [esp + sizeof.WINBIO_IDENTITY + 4]
-                jnz @f
-                push STATUS_COMMITTING
-                call SetStatus
-                jmp .winbio_done
-@@:             or [ebx + CONTEXT.dwState], STATE_ERROR
+                lea esp, [esp + 4 + sizeof.WINBIO_IDENTITY]
+                jz @f
+                or [ebx + CONTEXT.dwState], STATE_ERROR
                 push eax
                 push STATUS_ERROR
-                call SetStatus
+                jmp .enrolled
+@@:             push STATUS_COMMITTING
+.enrolled:      call SetStatus
                 jmp .winbio_done
 
 .commit:        cmp al, WINBIO_OPERATION_ENROLL_COMMIT
@@ -1120,8 +1094,9 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 @@:             push eax
                 call SetStatus
                 jmp .ack_req
+
 .discard:       cmp al, WINBIO_OPERATION_ENROLL_DISCARD
-                jnz .enum_units
+                jnz .open_fw
                 and [ebx + CONTEXT.dwState], not STATE_ENROLLING
                 push STATUS_DISCARDED
                 call SetStatus
@@ -1131,16 +1106,45 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call .start_identify
                 jmp .winbio_done
 
+.open_fw:       cmp al, WINBIO_OPERATION_OPEN_FRAMEWORK
+                jnz .enum_units
+
+                mov eax, [esi + WINBIO_ASYNC_RESULT.hSessionHandle]
+                mov ebx, [esi + WINBIO_ASYNC_RESULT.pUserData]
+                test eax, eax
+                mov [ebx + CONTEXT.hFramework], eax
+                mov edx, gui.szFrameworkError
+                jz .winbio_error
+
+                push WINBIO_TYPE_FINGERPRINT
+                push eax
+                call [WinBioAsyncEnumBiometricUnits]
+                test eax, eax
+                jz .winbio_done
+                mov edx, gui.szEnumerationError
+                jmp .winbio_error
+
 .enum_units:    cmp al, WINBIO_OPERATION_ENUM_BIOMETRIC_UNITS
-                jnz .open_fw
+                jnz .winbio_done
                 cmp [esi + WINBIO_ASYNC_RESULT.dwApiStatus], 0
-                jnz .units_error
+                mov edx, gui.szEnumerationError
+                jnz .winbio_error
 
                 xor ecx, ecx
 .next_unit:     cmp ecx, [esi + WINBIO_ASYNC_RESULT.EnumBiometricUnits.dwUnitCount]
-                jae .sensor_404
+                jbe .got_unit
 
-                imul eax, ecx, sizeof.WINBIO_UNIT_SCHEMA
+                ; Sensor missing
+                push NULL
+                push NULL
+                push WM_NUDGE
+                push [ebx + CONTEXT.win.hwnd]
+                call [SendMessageA]
+                mov edx, gui.szSensor404Error
+                jmp .winbio_error
+
+.got_unit:      imul eax, ecx, sizeof.WINBIO_UNIT_SCHEMA
+                inc ecx
                 add eax, [esi + WINBIO_ASYNC_RESULT.EnumBiometricUnits.pUnitSchemaArray]
 
                 push eax
@@ -1151,9 +1155,8 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push eax
                 push ecx
                 call [lstrcmpiW]
-                pop ecx
-                inc ecx
                 test eax, eax
+                pop ecx
                 pop eax
                 jnz .next_unit
 
@@ -1167,7 +1170,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push ebx
                 push NULL
                 push WM_WINBIO
-                push [hwnd]
+                push [ebx + CONTEXT.win.hwnd]
                 push WINBIO_ASYNC_NOTIFY_MESSAGE
                 push guidDatabase
                 push 1
@@ -1179,78 +1182,45 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call [WinBioAsyncOpenSession]
                 test eax, eax
                 jz .winbio_done
-                or [ebx + CONTEXT.dwState], STATE_ERROR
+                mov edx, gui.szSessionError
+                ;jmp .winbio_error
 
+.winbio_error:  or [ebx + CONTEXT.dwState], STATE_ERROR
                 push MB_ICONERROR or MB_OK
                 push gui.szError
-                push gui.szSessionError
-                push [hwnd]
+                push edx
+                push [ebx + CONTEXT.win.hwnd]
                 call [MessageBoxA]
-                jmp .winbio_done
-
-.sensor_404:    push NULL
-                push NULL
-                push WM_NUDGE
-                push [hwnd]
-                call [SendMessageA]
-
-                push MB_ICONERROR or MB_OK
-                push gui.szError
-                push gui.szSensor404Error
-                push [hwnd]
-                call [MessageBoxA]
-
-.units_error:   or [ebx + CONTEXT.dwState], STATE_ERROR
-                jmp .winbio_done
-
-.open_fw:       cmp al, WINBIO_OPERATION_OPEN_FRAMEWORK
-                jnz .winbio_done
-
-                mov eax, [esi + WINBIO_ASYNC_RESULT.hSessionHandle]
-                mov ebx, [esi + WINBIO_ASYNC_RESULT.pUserData]
-                test eax, eax
-                mov [ebx + CONTEXT.hFramework], eax
-                jz .fw_error
-
-                push WINBIO_TYPE_FINGERPRINT
-                push eax
-                call [WinBioAsyncEnumBiometricUnits]
-                test eax, eax
-                jz .winbio_done
-.fw_error:      or [ebx + CONTEXT.dwState], STATE_ERROR
-                jmp .winbio_done
-
 .winbio_done:   push esi
                 call [WinBioFree]
-.winbio_exit:   pop esi
+                pop esi
+                leave
                 retn
 
 .start_identify:
+                push ebp
+                mov ebp, esp
+                lea eax, [esp - 4]
+                lea ecx, [esp - 8]
                 sub esp, sizeof.WINBIO_IDENTITY + 4 + 4
-
-                ; Not needed as these are used only as output variables
-                ;mov dword [esp + WINBIO_IDENTITY.dwType], WINBIO_ID_TYPE_WILDCARD
-                ;mov dword [esp + WINBIO_IDENTITY.dwWildCard], WINBIO_ID_TYPE_WILDCARD
-
-                lea eax, [esp + sizeof.WINBIO_IDENTITY + 4]
-                lea ecx, [esp + sizeof.WINBIO_IDENTITY]
                 mov edx, esp
 
                 push eax ; pRejectDetail
                 push ecx ; pSubFactor
-                push edx ; pIdentity
+                push esp ; pIdentity
                 lea eax, [ebx + CONTEXT.dwUnitId]
                 push eax ; pUnitId
                 push [ebx + CONTEXT.hSession] ; SessionHandle
                 call [WinBioIdentify]
+                lea esp, [ebx + CONTEXT.dwState]
+                pop ecx
+                and ecx, not STATE_IDENTIFYING
                 test eax, eax
-                lea esp, [esp + sizeof.WINBIO_IDENTITY + 4 + 4]
                 jz @f
-
-                and [ebx + CONTEXT.dwState], not STATE_IDENTIFYING
-                or [ebx + CONTEXT.dwState], STATE_ERROR
-                retn
-@@:             or [ebx + CONTEXT.dwState], STATE_IDENTIFYING
+                or ecx, STATE_ERROR or STATE_IDENTIFYING
+@@:             xor ecx, STATE_IDENTIFYING
+                push ecx
+                leave
                 retn
 
 ;-------------------------------------------------------------------------;
@@ -1312,73 +1282,72 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 endp
 
 proc AboutDialogProc hdlg:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
+                push 0
                 mov eax, [msg]
-                cmp eax, WM_COMMAND
+                sub eax, WM_CLOSE ; cmp eax, WM_CLOSE
                 jz .close
-                cmp eax, WM_CLOSE
-                jz .close
-                xor eax, eax
-                ret
-
-.close:         push 0
+                sub eax, WM_COMMAND - WM_CLOSE ; cmp eax, WM_COMMAND
+                jnz .exit
+.close:         ; push 0
                 push [hdlg]
                 call [EndDialog]
                 push 1
-                pop eax
+.exit:          pop eax
                 ret
 endp
 
 ; Create a tray icon. The caller should hide the main window.
 ; Returns eax != 0 if the tray icon was created successfully
-proc ShowTrayIcon hwnd:DWORD
-                local nid:NOTIFYICONDATAA
-                push esi
+;proc ShowTrayIcon hwnd:DWORD
+;                local nid:NOTIFYICONDATAA
+ShowTrayIcon:   push esi
                 push edi
-
-                push sizeof.NOTIFYICONDATAA
-                pop ecx
-                lea edi, [nid]
-                push ecx
-                rep stosb
-                pop [nid.cbSize]
-
-                push [hwnd]
-                pop [nid.hWnd]
-                mov [nid.uID], TRAY_ID
-                mov [nid.uCallbackMessage], WM_TRAY
 
                 push IDI_MAIN
                 push NULL
                 call [GetModuleHandleA]
                 push eax
                 call [LoadIconA]
-                mov [nid.hIcon], eax
+                mov ecx, [esp + 2*4h + 4h] ; [hwnd]
 
-                push gui.szTip.size
+                ; Construct NOTIFYICONDATAA in the stack
+                sub esp, sizeof.NOTIFYICONDATAA - NOTIFYICONDATAA.szTip
+                mov edi, esp
+
+                push eax                                ; [nid.hIcon]
+                push WM_TRAY                            ; [nid.uCallbackMessage]
+                push NIF_ICON or NIF_MESSAGE or NIF_TIP ; [nid.uFlags]
+                push TRAY_ID                            ; [nid.uID]
+                push ecx                                ; [hwnd]
+                push sizeof.NOTIFYICONDATAA             ; [nid.cbSize]
+
+                ; [nid.szTip]
+                lea eax, [esp + sizeof.NOTIFYICONDATAA]
+                push gui.szTip.strlen
                 pop ecx
                 mov esi, gui.szTip
-                lea edi, [nid.szTip]
                 rep movsb
+                sub eax, edi
+                xchg eax, ecx
+                rep stosb
 
-                mov cl, NIF_ICON or NIF_MESSAGE or NIF_TIP
-                mov [nid.uFlags], ecx
-
-                lea eax, [nid]
-                push eax
+                push esp
                 push NIM_ADD
                 call [Shell_NotifyIconA]
+
+                add esp, sizeof.NOTIFYICONDATAA
                 pop edi
                 pop esi
-                ret
-endp
+                retn 4h
 
-proc HideTrayIcon hwnd:DWORD
+;proc HideTrayIcon hwnd:DWORD
+HideTrayIcon:
+                mov eax, [esp + 4h] ; [hwnd]
                 mov ecx, sizeof.NOTIFYICONDATAA/4
 @@:             push 0
                 loop @b
 
                 mov [esp + NOTIFYICONDATAA.cbSize], sizeof.NOTIFYICONDATAA
-                mov eax, [hwnd]
                 mov [esp + NOTIFYICONDATAA.hWnd], eax
                 mov [esp + NOTIFYICONDATAA.uID], TRAY_ID
 
@@ -1387,8 +1356,7 @@ proc HideTrayIcon hwnd:DWORD
                 call [Shell_NotifyIconA]
 
                 add esp, sizeof.NOTIFYICONDATAA
-                ret
-endp
+                retn 4h
 
 ;-------------------------------------------------------------------------;
 ; Helper functions below all expect ebx = CONTEXT!
@@ -1593,35 +1561,37 @@ proc InitFingerList
                 ret
 endp
 
-proc SetCommand iItem:DWORD, szText:DWORD
-                local item:LV_ITEM
-
-                push edi
-                xor eax, eax
-                lea ecx, [eax + sizeof.LV_ITEM]
-                lea edi, [item]
-                rep stosb
-                mov edi, [szText]
-                push COLUMN_COMMAND
-                push [iItem]
-                push LVIF_TEXT
-                mov [item.pszText], edi
-                pop [item.mask]
-                pop [item.iItem]
-                pop [item.iSubItem]
-                scasb
-                pop edi
-
-                lea eax, [item]
+;proc SetCommand iItem:DWORD, szText:DWORD
+;                local item:LV_ITEM
+SetCommand:
+                pop eax
+                pop ecx ; [iItem]
+                pop edx ; [szText]
                 push eax
-                push 0
+
+                ; sizeof.LV_ITEM = 28h = 40 = 4*10
+                ; Construct LV_ITEM on the stack
+                push eax
+                push eax
+                push eax
+                push eax
+                push edx            ; LV_ITEM.pszText
+                push eax
+                push eax
+                push COLUMN_COMMAND ; LV_ITEM.iSubItem
+                push ecx            ; LV_ITEM.iItem
+                push LVIF_TEXT      ; LV_ITEM.iMask
+
+                push esp
+                push eax ; 0
                 push LVM_SETITEM
                 push [ebx + CONTEXT.winList.hwnd]
                 call [SendMessageA]
 
                 call ResizeColumns
-                ret
-endp
+
+                add esp, sizeof.LV_ITEM
+                retn
 
 ; The return pointer should be freed with HeapFree(GetCurrenProcessHeap(), ...)
 proc GetCommand iItem:DWORD
@@ -1710,6 +1680,7 @@ proc RunSubFactorCommand dwSubFactor:DWORD
                 not ecx
                 dec ecx ; strlen(esi)
                 jz .cleanup
+                lea edx, [esi+ecx]
 
                 ; Quotes?
                 dec ecx
@@ -1944,10 +1915,8 @@ SetStatus:
                 mov ebp, esp
                 push edx
                 jz .unknown_error
-
 .winbio_error:  add ecx, gui.szStatusErrorText - gui.szStatusError
                 push eax
-
 .unknown_error: push ecx
                 lea eax, [ebp+4] ; lea eax, [.szBuf]
                 push eax

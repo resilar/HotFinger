@@ -251,7 +251,7 @@ proc ReadAppDataSettings pSettings:DWORD
                 push ebx
                 call [GetPrivateProfileStringA]
 
-                ; Strip semicolon
+                ; Strip semicolon terminator
                 mov ecx, eax
                 jecxz @f
                 cmp byte [esi + ecx - 1], ';'
@@ -273,6 +273,7 @@ proc ReadAppDataSettings pSettings:DWORD
                 retn
 endp
 
+; pSettings:SETTINGS
 proc WriteAppDataSettings pSettings:DWORD
                 local szItoaBuf[16]:BYTE
                 local szPath[MAX_PATH]:BYTE
@@ -398,7 +399,7 @@ proc WriteAppDataSettings pSettings:DWORD
                 mov edx, esp
                 push ecx
 
-                ; Escape by appending semicolon
+                ; Escape quotes by terminating the value with semicolon
                 push esi
                 push edi
                 mov esi, eax

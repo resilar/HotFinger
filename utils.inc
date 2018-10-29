@@ -291,7 +291,7 @@ proc RunAsAdmin wszParameters:DWORD, hwndParent:DWORD
                 test eax, eax
                 jz .fail
 
-                push 50000
+                push 5000
                 push [edi + SHELLEXECUTEINFO.hProcess]
                 call [WaitForSingleObject]
                 test eax, eax
@@ -407,7 +407,7 @@ WbioSrvcRestart:
                 jmp .query_restart
 .restarted:
 
-                mov dword [esp+8], 1 ; mov [.rc], eax
+                mov dword [esp+8], 1 ; mov [.rc], 1
 .fail:          xchg [esp], ebx
                 call [CloseServiceHandle]
 .fail_service:  call [CloseServiceHandle]
