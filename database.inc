@@ -8,7 +8,8 @@ KEY_WOW64_32KEY = 0200h
 RRF_RT_REG_SZ    = 02h
 RRF_RT_REG_DWORD = 10h
 
-ERROR_ACCESS_DENIED = 5
+ERROR_PATH_NOT_FOUND = 3
+ERROR_ACCESS_DENIED  = 5
 
 RPC_S_SERVER_TOO_BUSY    = 000006BBh
 RPC_X_SS_IN_NULL_CONTEXT = 000006EFh
@@ -1064,11 +1065,30 @@ proc UninstallDatabase guid:DWORD
                 pop eax
                 jnz @f
                 test eax, eax
-                jnz @f
-                mov byte [edi+eax], 0
+                jz @f
+                mov byte [edi+eax-1], 0
 
                 push edi
                 call [DeleteFileA]
+                test eax, eax
+                jnz @f
+
+                call [GetLastError]
+                sub eax, ERROR_PATH_NOT_FOUND
+                jnz @f
+
+                ; In 32-bit processes on 64-bit Windows, access to System32 is
+                ; redirected to SysWOW64, which causes DeleteFileA() on WinBio
+                ; databases to fail (the databases are contained in System32).
+                ; Therefore, disable Wow64FsRedirection and retry the deletion.
+                push eax
+                push esp
+                call [Wow64DisableWow64FsRedirection]
+
+                push edi
+                call [DeleteFileA]
+
+                call [Wow64RevertWow64FsRedirection]
 
 @@:             push [hKey]
                 call [RegCloseKey]
