@@ -980,7 +980,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 test eax, eax
                 mov [ebx + CONTEXT.hSession], eax
                 jz .session_error
-                and [ebx + CONTEXT.dwState], STATE_INITIALIZING xor -1
+                and [ebx + CONTEXT.dwState], not STATE_INITIALIZING
                 call .start_identify
 
                 ;cmp eax, WINBIO_RPC_X_SS_IN_NULL_CONTEXT
@@ -1006,7 +1006,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 ;mov ecx, [esi + WINBIO_ASYNC_RESULT.Identify.dwSubFactor]
                 ;mov ecx, [esi + WINBIO_ASYNC_RESULT.Identify.dwRejectDetail]
                 jz .identified
-                and [ebx + CONTEXT.dwState], STATE_IDENTIFYING xor -1
+                and [ebx + CONTEXT.dwState], not STATE_IDENTIFYING
                 cmp eax, WINBIO_E_UNKNOWN_ID
                 jz .id_retry
                 cmp eax, WINBIO_E_BAD_CAPTURE
@@ -1109,7 +1109,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
 .commit:        cmp al, WINBIO_OPERATION_ENROLL_COMMIT
                 jnz .discard
-                and [ebx + CONTEXT.dwState], STATE_ENROLLING xor -1
+                and [ebx + CONTEXT.dwState], not STATE_ENROLLING
 
                 mov ecx, [esi + WINBIO_ASYNC_RESULT.dwApiStatus]
                 mov al, STATUS_COMMITTED
@@ -1122,12 +1122,12 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 jmp .ack_req
 .discard:       cmp al, WINBIO_OPERATION_ENROLL_DISCARD
                 jnz .enum_units
-                and [ebx + CONTEXT.dwState], STATE_ENROLLING xor -1
+                and [ebx + CONTEXT.dwState], not STATE_ENROLLING
                 push STATUS_DISCARDED
                 call SetStatus
 .ack_req:       test [ebx + CONTEXT.dwState], STATE_ENROLL_REQUESTED
                 jz .winbio_done
-                and [ebx + CONTEXT.dwState], STATE_ENROLL_REQUESTED xor -1
+                and [ebx + CONTEXT.dwState], not STATE_ENROLL_REQUESTED
                 call .start_identify
                 jmp .winbio_done
 
@@ -1247,7 +1247,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 lea esp, [esp + sizeof.WINBIO_IDENTITY + 4 + 4]
                 jz @f
 
-                and [ebx + CONTEXT.dwState], STATE_IDENTIFYING xor -1
+                and [ebx + CONTEXT.dwState], not STATE_IDENTIFYING
                 or [ebx + CONTEXT.dwState], STATE_ERROR
                 retn
 @@:             or [ebx + CONTEXT.dwState], STATE_IDENTIFYING
