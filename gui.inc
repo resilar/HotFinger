@@ -174,16 +174,16 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call [GetWindowLongA]
                 test eax, eax
                 mov ebx, eax
-                jz @f
-                retn
-@@:             push MB_ICONERROR
+                jnz @f
+                push MB_ICONERROR
                 push gui.szError
                 push gui.szWindowContextMissing
                 push [hwnd]
                 call [MessageBoxA]
                 push [hwnd]
                 call [DestroyWindow]
-                retn
+                mov dword [esp], .exit
+@@:             retn
 
 ;-------------------------------------------------------------------------;
 
@@ -200,9 +200,16 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call [HeapAlloc]
                 test eax, eax
                 pop ecx
-                mov ebx, eax
-                mov eax, gui.szOutOfMemoryError
-                jz .create_fail
+                jnz .init_context
+
+                push MB_ICONERROR or MB_OK
+                push gui.szError
+                push gui.szOutOfMemoryError
+                push [hwnd]
+                call [MessageBoxA]
+                jmp .create_fail
+
+.init_context:  mov ebx, eax
                 xor eax, eax
                 mov edi, ebx
                 rep stosb
@@ -526,6 +533,23 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call [GetDpiForWindow]
                 mov [ebx + CONTEXT.dwDPI], eax
 
+                ; Open async WinBio
+                call .winbio_open
+                test eax, eax
+                jnz .create_fail
+
+.create_ok:     inc dword [esp] ; +1
+                inc dword [esp] ;  0
+.create_fail:   pop eax         ; -1
+                pop edi
+                pop ebx
+                pop ebx
+                ret
+
+.winbio_open:   mov eax, [ebx + CONTEXT.dwState]
+                test eax, eax
+                jnz .winbio_fail
+
                 ; Open async WinBio framework for enumerating biometric units
                 lea eax, [ebx + CONTEXT.hFramework]
                 push eax
@@ -533,29 +557,24 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push ebx
                 push NULL
                 push WM_WINBIO
-                push [hwnd]
+                push [ebx + CONTEXT.win.hwnd]
                 push WINBIO_ASYNC_NOTIFY_MESSAGE
                 call [WinBioAsyncOpenFramework]
 
                 test eax, eax
-                mov eax, gui.szFrameworkError
-                jz .create_ok
-                mov [ebx + CONTEXT.dwState], STATE_ERROR
+                jnz .winbio_fail
+                mov [ebx + CONTEXT.dwState], STATE_INITIALIZING
+                retn
 
-.create_fail:   push MB_ICONERROR or MB_OK
-                push gui.szError
+.winbio_fail:   or [ebx + CONTEXT.dwState], STATE_ERROR
                 push eax
-                push [hwnd]
+                push MB_ICONERROR or MB_OK
+                push gui.szError
+                push gui.szFrameworkError
+                push [ebx + CONTEXT.win.hwnd]
                 call [MessageBoxA]
-                jmp @f
-.create_ok:     mov [ebx + CONTEXT.dwState], STATE_INITIALIZING
-                inc dword [esp] ; +1
-                inc dword [esp] ;  0
-@@:             pop eax         ; -1
-                pop edi
-                pop ebx
-                pop ebx
-                ret
+                pop eax
+                retn
 
 ;-------------------------------------------------------------------------;
 
@@ -832,25 +851,36 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 ; UNIMPLEMENTED
                 retn
 
-.IDM_UNINSTALL: push [hwnd]
+.IDM_UNINSTALL: call ebx
+                test ebx, ebx
+                jz .uninstall_quit
+                test [ebx + CONTEXT.dwState], STATE_INITIALIZING
+                jnz .uninstall_err
+                push [ebx + CONTEXT.hSession]
+                call .winbio_close
+
+                push [ebx + CONTEXT.win.hwnd]
                 push gui.wszUninstall
                 call RunAsAdmin
                 test eax, eax
+                pop eax ; hSession
                 jz .uninstalled
-                push MB_ICONERROR or MB_OK
+                test eax, eax
+                jz .uninstall_err
+                call .winbio_open
+
+.uninstall_err: push MB_ICONERROR or MB_OK
                 push gui.szError
                 push gui.szUninstallError
-                push [hwnd]
+                push [ebx + CONTEXT.win.hwnd]
                 call [MessageBoxA]
                 retn
-.uninstalled:   call ebx ; .get_ebx_ctx
-                test ebx, ebx
-                jz @f
-                mov eax, [ebx + CONTEXT.pSettings]
+
+.uninstalled:   mov eax, [ebx + CONTEXT.pSettings]
                 test eax, eax
-                jz @f
+                jz .uninstall_quit
                 mov word [eax + SETTINGS.vol.wszDeviceInstanceId], 0
-@@:             ;push [hwnd]
+.uninstall_quit:;push [hwnd]
                 ;call [DestroyWindow]
                 ;retn
 
@@ -1186,6 +1216,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 ;jmp .winbio_error
 
 .winbio_error:  or [ebx + CONTEXT.dwState], STATE_ERROR
+                and [ebx + CONTEXT.dwState], not STATE_INITIALIZING
                 push MB_ICONERROR or MB_OK
                 push gui.szError
                 push edx
@@ -1240,17 +1271,8 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 mov eax, [ebx + CONTEXT.pSettings]
                 call SaveSettings
 
-.free_context:  mov eax, [ebx + CONTEXT.hFramework]
-                test eax, eax
-                jz @f
-                push eax
-                call [WinBioCloseFramework]
-@@:             mov eax, [ebx + CONTEXT.hSession]
-                test eax, eax
-                jz @f
-                push eax
-                call [WinBioCloseSession]
-@@:
+.free_context:  call .winbio_close
+
                 mov eax, [ebx + CONTEXT.hTrayMenu]
                 test eax, eax
                 jz @f
@@ -1271,6 +1293,28 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
 .context_freed: push 0
                 call [PostQuitMessage]
+                retn
+
+.winbio_close:  mov eax, [ebx + CONTEXT.hFramework]
+                test eax, eax
+                jz @f
+                push eax
+                call [WinBioCloseFramework]
+@@:             mov eax, [ebx + CONTEXT.hSession]
+                test eax, eax
+                jz @f
+                push eax
+                push eax
+                push eax
+                call [WinBioCancel]
+                call [WinBioWait]
+                call [WinBioCloseSession]
+@@:             push STATUS_DEFAULT
+                call SetStatus
+                xor eax, eax
+                mov [ebx + CONTEXT.hFramework], eax
+                mov [ebx + CONTEXT.hSession], eax
+                mov [ebx + CONTEXT.dwState], eax
                 retn
 
 ;-------------------------------------------------------------------------;
