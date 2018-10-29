@@ -1,5 +1,5 @@
 ;-------------------------------------------------------------------------;
-; WinBio definitions
+; WinBio definitions (incomplete)
 ;-------------------------------------------------------------------------;
 WINBIO_TYPE_MULTIPLE           = 00000001h
 WINBIO_TYPE_FACIAL_FEATURES    = 00000002h
