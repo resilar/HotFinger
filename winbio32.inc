@@ -331,7 +331,7 @@ struct WINBIO_IDENTITY
   dwType dd ?
   union
     dwNull       dd ?
-    dwWildCard   dd ?
+    dwWildcard   dd ?
     guidTemplate db 16 dup (?)
     AccountSid   WINBIO_IDENTITY_ACCOUNT_SID
   ends
