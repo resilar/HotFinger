@@ -133,13 +133,13 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push ebx
                 mov eax, [msg]
                 mov ebx, .get_ebx_ctx
-                push .exit_retn ; Return address
+                push .exit_retn ; return address
                 cmp eax, WM_CREATE
                 jz .WM_CREATE
-                cmp eax, WM_GETMINMAXINFO
-                jz .WM_GETMINMAXINFO
                 cmp eax, WM_DPICHANGED
                 jz .WM_DPICHANGED
+                cmp eax, WM_GETMINMAXINFO
+                jz .WM_GETMINMAXINFO
                 cmp eax, WM_SIZE
                 jz .WM_SIZE
                 cmp eax, WM_SYSCOMMAND
@@ -173,8 +173,9 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push [hwnd]
                 call [GetWindowLongA]
                 test eax, eax
+                jz @f
                 mov ebx, eax
-                jnz @f
+                retn
                 push MB_ICONERROR
                 push gui.szError
                 push gui.szWindowContextMissing
@@ -182,8 +183,8 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call [MessageBoxA]
                 push [hwnd]
                 call [DestroyWindow]
-                mov dword [esp], .exit
-@@:             retn
+                pop eax ; old return address
+                jmp .exit
 
 ;-------------------------------------------------------------------------;
 
@@ -578,6 +579,12 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
 ;-------------------------------------------------------------------------;
 
+.WM_DPICHANGED: call ebx ; .get_ebx_ctx
+                push [hwnd]
+                call [GetDpiForWindow]
+                mov [ebx + CONTEXT.dwDPI], eax
+                retn
+
 .WM_GETMINMAXINFO:
                 mov eax, [lParam]
                 test eax, eax
@@ -599,14 +606,6 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call [MulDiv]
                 mov [ebx + MINMAXINFO.ptMinTrackSize.y], eax
 
-                retn
-
-;-------------------------------------------------------------------------;
-
-.WM_DPICHANGED: push [hwnd]
-                call [GetDpiForWindow]
-                call ebx ; .get_ebx_ctx
-                mov [ebx + CONTEXT.dwDPI], eax
                 retn
 
 .WM_SIZE:       call ebx ; .get_ebx_ctx
@@ -926,7 +925,8 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
 ;--------------------------------------------------------------------------;
 
-.WM_NUDGE:      mov eax, [hwnd]
+.WM_NUDGE:      call ebx ; .get_ebx_ctx
+                mov eax, [hwnd]
                 push eax ; [hwnd]
                 push eax ; [hwnd]
                 push SW_SHOW
@@ -934,7 +934,6 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 call [ShowWindow]
                 call [SetForegroundWindow]
                 call [SetFocus]
-                call ebx ; .get_ebx_ctx
                 mov eax, [ebx + CONTEXT.pSettings]
                 xor ecx, ecx
                 cmp [eax + SETTINGS.GUI.dwMinimized], ecx

@@ -338,6 +338,7 @@ section '.idata' import readable
          SHAutoComplete, 'SHAutoComplete'
 
   import user32, \
+        AdjustWindowRectExForDpi, 'AdjustWindowRectExForDpi', \
         AppendMenuA, 'AppendMenuA', \
         CreateMenu, 'CreateMenu', \
         CreatePopupMenu, 'CreatePopupMenu', \
@@ -364,6 +365,7 @@ section '.idata' import readable
         IsDialogMessage, 'IsDialogMessage', \
         LoadCursorA, 'LoadCursorA', \
         LoadIconA, 'LoadIconA', \
+        MapDialogRect, 'MapDialogRect', \
         MessageBoxA, 'MessageBoxA', \
         MoveWindow, 'MoveWindow', \
         PostQuitMessage, 'PostQuitMessage', \
@@ -375,6 +377,7 @@ section '.idata' import readable
         SetForegroundWindow, 'SetForegroundWindow', \
         SetMenu, 'SetMenu', \
         SetWindowLongA, 'SetWindowLongA', \
+        SetWindowPos, 'SetWindowPos', \
         SetWindowTextA, 'SetWindowTextA', \
         ShowWindow, 'ShowWindow', \
         TrackPopupMenu, 'TrackPopupMenu', \
@@ -402,20 +405,20 @@ section '.idata' import readable
 section '.rsrc' resource data readable
 
 ; Dialogs
-IDD_SENSOR      = 100
-IDD_ABOUT       = 101
-
-; Icons
-IDI_MAIN        = 401
+IDD_SENSOR = 100
+IDD_ABOUT  = 101
 
 ; Sensor dialog
 IDC_BTN_SELECT     = 2000
 IDC_BTN_CANCEL     = 2001
-IDC_LIST_SENSORS   = 2002
-IDC_STATIC_MESSAGE = 2003
+IDC_STATIC_MESSAGE = 2002
+IDC_LIST_SENSORS   = 2003
 
 ; About dialog
 IDC_STATIC_ICON = 3000
+
+; Icons
+IDI_MAIN = 401
 
   directory RT_DIALOG, dialogs, \
             RT_ICON, icons, \
@@ -426,18 +429,16 @@ IDC_STATIC_ICON = 3000
   resource dialogs, \
            IDD_SENSOR, LANG_ENGLISH+SUBLANG_DEFAULT, sensor_dialog, \
            IDD_ABOUT, LANG_ENGLISH+SUBLANG_DEFAULT, about_dialog
-  resource manifests, 1, LANG_NEUTRAL, manifest
-  resource versions,  1, LANG_NEUTRAL, version
   resource icons,     1, LANG_NEUTRAL, icon_data
   resource group_icons, IDI_MAIN, LANG_NEUTRAL, main_icon
+  resource manifests, 1, LANG_NEUTRAL, manifest
+  resource versions,  1, LANG_NEUTRAL, version
 
-  DLG_WIDTH = 350
-  DLG_HEIGHT = 120
-  dialog sensor_dialog, 'Sensor dialog', 0,0,DLG_WIDTH,DLG_HEIGHT, WS_CAPTION+WS_POPUP+WS_SYSMENU+DS_MODALFRAME+DS_CENTER
+  dialog sensor_dialog, 'Sensor dialog', 0,0,DLG_WIDTH,DLG_HEIGHT, WS_POPUP+WS_OVERLAPPEDWINDOW+DS_MODALFRAME+DS_CENTER
     dialogitem 'BUTTON','&Select', IDC_BTN_SELECT, DLG_WIDTH-108,DLG_HEIGHT-18,50,14, BS_DEFPUSHBUTTON+WS_VISIBLE+WS_TABSTOP+WS_DISABLED
     dialogitem 'BUTTON','&Cancel', IDC_BTN_CANCEL, DLG_WIDTH-54,DLG_HEIGHT-18,50,14, BS_PUSHBUTTON+WS_VISIBLE+WS_TABSTOP
-    dialogitem 'SysListView32','', IDC_LIST_SENSORS, 4,4,DLG_WIDTH-8,DLG_HEIGHT-24, WS_VISIBLE+WS_BORDER+WS_TABSTOP+LVS_REPORT+LVS_SINGLESEL+LVS_SHOWSELALWAYS
     dialogitem 'STATIC','Select sensor from the list', IDC_STATIC_MESSAGE, 4,DLG_HEIGHT-14,DLG_WIDTH-112,8, WS_VISIBLE
+    dialogitem 'SysListView32','', IDC_LIST_SENSORS, 4,4,DLG_WIDTH-8,DLG_HEIGHT-24, WS_VISIBLE+WS_BORDER+WS_TABSTOP+LVS_REPORT+LVS_SINGLESEL+LVS_SHOWSELALWAYS
   enddialog
 
   dialog about_dialog,'About', 40,40,170,60, WS_CAPTION+WS_POPUP+WS_SYSMENU+DS_MODALFRAME
