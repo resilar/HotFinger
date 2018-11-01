@@ -127,9 +127,6 @@ CONTEXT_FIRST_WINDOW_OFFSET = CONTEXT.winList
 CONTEXT_WINDOW_COUNT = (sizeof.CONTEXT - CONTEXT_FIRST_WINDOW_OFFSET)/sizeof.WIN
 
 proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
-                local buf[MAX_PATH+4]:BYTE
-                local ofn:OPENFILENAME
-
                 push ebx
                 mov eax, [msg]
                 mov ebx, .get_ebx_ctx
@@ -759,47 +756,60 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 .path_oom:      retn
 
 .IDC_BROWSE:    call ebx ; .get_ebx_ctx
-
-                xor eax, eax
                 push edi
-                lea edi, [ofn]
+                mov eax, esp
+                sub esp, sizeof.OPENFILENAME + MAX_PATH+4
+                mov edi, esp
+                push eax
                 push edi ; for GetOpenFileNameA
 
-                mov ecx, sizeof.OPENFILENAME
-                push [hwnd]
-                push [ebx + CONTEXT.hInst]
+                xor eax, eax
+                lea ecx, [eax + sizeof.OPENFILENAME]
                 push ecx
                 rep stosb
-                pop [ofn.lStructSize]
-                pop [ofn.hInstance]
-                pop [ofn.hwndOwner]
+                mov al, '"'
+                stosb
+                mov byte [edi], cl
+                virtual at edi - sizeof.OPENFILENAME-1
+                  .ofn  OPENFILENAME
+                  .path db MAX_PATH+4 dup (?)
+                end virtual
+                pop [.ofn.lStructSize]
 
-                lea edi, [buf+1]
-                mov [ofn.lpstrFile], edi
-                mov [ofn.nMaxFile], MAX_PATH
-                mov byte [edi], 0
-                mov [ofn.lpstrFilter], gui.szBrowseFilter
-                mov [ofn.nFilterIndex], 1
-                mov [ofn.Flags], OFN_PATHMUSTEXIST or OFN_FILEMUSTEXIST
+                push [hwnd]
+                pop [.ofn.hwndOwner]
+
+                mov [.ofn.lpstrFilter], gui.szBrowseFilter
+                mov byte [.ofn.nFilterIndex], 1
+
+                mov [.ofn.lpstrFile], edi
+                mov [.ofn.nMaxFile], MAX_PATH+1
+
+                ; mov byte [.ofn.Flags], 1800h
+                mov byte [.ofn.Flags+1], (OFN_PATHMUSTEXIST or OFN_FILEMUSTEXIST) shr 8
 
                 call [GetOpenFileNameA]
                 test eax, eax
                 jz .browse_exit
 
-.opened:        xor eax, eax
-                lea ecx, [eax-1] ; -1
-                push edi ; for SendMessageA
+.opened:        push edi ; for SendMessageA
+
+                ; strlen(edi)
+                xor eax, eax
+                or ecx, -1
                 repnz scasb
                 not ecx
-                dec ecx ; strlen(edi)
+                sub edi, ecx
+                dec ecx
                 jz .unquoted
+
+                ; Add quotes if the path contains a space
                 mov al, ' '
-                mov edi, [esp]
                 repnz scasb
                 jnz .unquoted
+                ;mov byte [.path], '"' ; done already
                 mov byte [edi+ecx], '"'
                 mov byte [edi+ecx+1], 0
-                mov byte [buf], '"'
                 dec dword [esp]
 .unquoted:
                 push 0
@@ -807,7 +817,8 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push [ebx + CONTEXT.winPath.hwnd]
                 call [SendMessageA]
 
-.browse_exit:   pop edi
+.browse_exit:   pop esp
+                pop edi
                 retn
 
 .IDC_ENROLL:    call ebx ; .get_ebx_ctx
@@ -1750,9 +1761,9 @@ proc RunSubFactorCommand dwSubFactor:DWORD
 
 .no_params:     xor edi, edi
 
-.execute:       mov cl, byte [edx]
+.execute:       xor ecx, ecx
+                xchg cl, byte [edx]
                 push ecx
-                mov byte [edx], 0
 
                 push SW_SHOWNORMAL
                 push NULL
