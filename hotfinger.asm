@@ -348,6 +348,8 @@ section '.idata' import readable
         DestroyWindow, 'DestroyWindow', \
         DialogBoxParamA, 'DialogBoxParamA', \
         DispatchMessageA, 'DispatchMessageA', \
+        DrawMenuBar, 'DrawMenuBar', \
+        EnableMenuItem, 'EnableMenuItem', \
         EnableWindow, 'EnableWindow', \
         EndDialog, 'EndDialog', \
         FindWindowA, 'FindWindowA', \
@@ -356,6 +358,7 @@ section '.idata' import readable
         GetDlgItem, 'GetDlgItem', \
         GetDpiForSystem, 'GetDpiForSystem', \
         GetDpiForWindow, 'GetDpiForWindow', \
+        GetMenuItemCount, 'GetMenuItemCount', \
         GetMessageA, 'GetMessageA', \
         GetSystemMetricsForDpi, 'GetSystemMetricsForDpi', \
         GetWindowLongA, 'GetWindowLongA', \

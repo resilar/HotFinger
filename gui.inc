@@ -855,6 +855,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 retn
 
 .enrolling:     or [ebx + CONTEXT.dwState], STATE_ENROLLING
+                call EnterEnrollmentMode
 .enroll_ret:    retn
 
 .IDM_PREFERENCES:
@@ -1094,11 +1095,11 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
 .enroll_err:    or [ebx + CONTEXT.dwState], STATE_ERROR
                 push eax
-                push [ebx + CONTEXT.hSession]
-                call [WinBioEnrollDiscard]
                 push STATUS_ERROR
                 call SetStatus
-                jmp .winbio_done
+                ;push [ebx + CONTEXT.hSession]
+                ;call [WinBioEnrollDiscard]
+                ;jmp .winbio_done
 
 .enroll_cancel: push [ebx + CONTEXT.hSession]
                 call [WinBioEnrollDiscard]
@@ -1124,6 +1125,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 .commit:        cmp al, WINBIO_OPERATION_ENROLL_COMMIT
                 jnz .discard
                 and [ebx + CONTEXT.dwState], not STATE_ENROLLING
+                call LeaveEnrollmentMode
 
                 mov ecx, [esi + WINBIO_ASYNC_RESULT.dwApiStatus]
                 mov al, STATUS_COMMITTED
@@ -1140,6 +1142,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 and [ebx + CONTEXT.dwState], not STATE_ENROLLING
                 push STATUS_DISCARDED
                 call SetStatus
+                call LeaveEnrollmentMode
 .ack_req:       test [ebx + CONTEXT.dwState], STATE_ENROLL_REQUESTED
                 jz .winbio_done
                 and [ebx + CONTEXT.dwState], not STATE_ENROLL_REQUESTED
@@ -1418,6 +1421,9 @@ HideTrayIcon:
 ; - StatusBarHeight
 ; - ResizeColumns
 ; - InitFingerList
+; - EnterEnrollmentMode
+; - LeaveEnrollmentMode
+; - SetEnrollmentMode
 ; - SetCommand
 ; - GetCommand
 ; - RunSubFactorCommand
@@ -1614,6 +1620,83 @@ proc InitFingerList
                 pop edi
                 ret
 endp
+
+EnterEnrollmentMode:
+                pop eax
+                push 1
+                push eax
+                jmp SetEnrollmentMode
+
+LeaveEnrollmentMode:
+                pop eax
+                push 0
+                push eax
+                ;jmp SetEnrollmentMode
+
+;proc SetEnrollmentMode bEnabled:DWORD
+SetEnrollmentMode:
+                push ebx
+                push ebp
+                lea ebp, [ebx + CONTEXT.winList] ; This yields smaller offsets
+                virtual at ebp - CONTEXT.winList ; => shorter instructions
+                  .ctx CONTEXT
+                end virtual
+                mov ebx, [esp + 2*4h + 4h] ; [bEnabled]
+
+                test ebx, ebx
+                jz .leaving_mode
+.entering_mode: push 1
+                pop ebx
+                push gui.szDiscard
+                jmp .set_text
+.leaving_mode:  push gui.szEnroll
+.set_text:      push [.ctx.winEnroll.hwnd]
+                call [SetWindowTextA]
+
+.hwnd:          ; Enable/disable controls
+                push NULL
+                push [.ctx.winList.hwnd]
+                push [.ctx.winPath.hwnd]
+                push [.ctx.winBrowse.hwnd]
+                xor ebx, 1
+.hwnd_next:     pop eax
+                test eax, eax
+                jz .hwnd_done
+                push ebx
+                push eax
+                call [EnableWindow]
+                jmp .hwnd_next
+.hwnd_done:
+
+.menu:          ; Enable/disable menu
+                test ebx, ebx
+                jz .menu_disable
+.menu_enable:   push MF_BYPOSITION
+                jmp @f
+.menu_disable:  push MF_BYPOSITION or MF_DISABLED or MF_GRAYED
+@@:             push [.ctx.hMenu]
+                call [GetMenuItemCount]
+                mov ecx, eax
+                pop eax
+
+                ; ROP-chain EnableMenuItem calls and DrawMenuBar
+                dec ecx
+                js .menu_done
+                push [.ctx.win.hwnd]
+                push .menu_done
+                mov edx, [DrawMenuBar]
+@@:             push eax
+                push ecx
+                push [.ctx.hMenu]
+                push edx
+                mov edx, [EnableMenuItem]
+                dec ecx
+                jns @b
+                jmp edx
+.menu_done:
+.exit:          pop ebp
+                pop ebx
+                retn 4h
 
 ;proc SetCommand iItem:DWORD, szText:DWORD
 ;                local item:LV_ITEM
@@ -1883,7 +1966,7 @@ proc SetSelection dwFactor:DWORD
                 push eax
 
                 push edi
-                push ecx;0
+                push ecx ; 0
                 push LVM_SETITEM
                 push eax
                 call [SendMessageA]

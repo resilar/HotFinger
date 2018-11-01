@@ -89,6 +89,7 @@ align 2
 .wszPathCue      du 'Command to execute',0
 .szBrowse        db 'Browse',0
 .szEnroll        db '&Enroll',0
+.szDiscard       db '&Discard',0
 .szError = hotfinger.szError
 
 .szBrowseFilter  db 'Executables (*.exe)',0, '*.exe',0
