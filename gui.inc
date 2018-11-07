@@ -1175,7 +1175,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
                 xor ecx, ecx
 .next_unit:     cmp ecx, [esi + WINBIO_ASYNC_RESULT.EnumBiometricUnits.dwUnitCount]
-                jbe .got_unit
+                jb .got_unit
 
                 ; Sensor missing
                 push NULL
