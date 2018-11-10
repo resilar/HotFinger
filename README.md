@@ -23,7 +23,7 @@ appreciated (include error messages and other debug information).
 - Written in assembler
   - So it's blazingly fast
   - And crazy small (42KB which includes an 18KB icon)
-- High DPI support (hey it's 2018)
+- High DPI aware GUI (hey it's 2018)
 - Minimize to tray
 
 
