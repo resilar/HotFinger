@@ -264,7 +264,7 @@ proc IterSensorConfigurations pwszDeviceInstanceId:DWORD, fnFilter:DWORD, pUser:
 
                 lea eax, [hConfigurationsKey]
                 push eax
-                push KEY_READ + KEY_WOW64_32KEY + KEY_SET_VALUE
+                push KEY_READ + KEY_SET_VALUE
                 push 0
                 lea eax, [szKey]
                 push eax
@@ -304,7 +304,7 @@ proc IterSensorConfigurations pwszDeviceInstanceId:DWORD, fnFilter:DWORD, pUser:
 
                 lea eax, [hDevicesKey]
                 push eax
-                push KEY_READ + KEY_WOW64_32KEY
+                push KEY_READ
                 push 0
                 lea eax, [wszDeviceInstanceId]
                 push eax
@@ -336,7 +336,7 @@ proc IterSensorConfigurations pwszDeviceInstanceId:DWORD, fnFilter:DWORD, pUser:
                 jnz .devices_end
                 lea eax, [hDeviceKey]
                 push eax
-                push KEY_READ + KEY_WOW64_32KEY
+                push KEY_READ
                 push 0
                 push edi
                 push [hDevicesKey]
@@ -369,7 +369,7 @@ proc IterSensorConfigurations pwszDeviceInstanceId:DWORD, fnFilter:DWORD, pUser:
                 jnz .insts_end
                 lea eax, [hInstanceKey]
                 push eax
-                push KEY_READ + KEY_WOW64_32KEY
+                push KEY_READ
                 push 0
                 push edi
                 push [hDeviceKey]
@@ -379,7 +379,7 @@ proc IterSensorConfigurations pwszDeviceInstanceId:DWORD, fnFilter:DWORD, pUser:
 
                 lea eax, [hConfigurationsKey]
                 push eax
-                push KEY_READ + KEY_WOW64_32KEY
+                push KEY_READ
                 push 0
                 push database.szConfigsKey
                 push [hInstanceKey]
@@ -422,7 +422,7 @@ proc IterSensorConfigurations pwszDeviceInstanceId:DWORD, fnFilter:DWORD, pUser:
 
                 lea eax, [hConfigurationKey]
                 push eax
-                push KEY_READ + KEY_WOW64_32KEY
+                push KEY_READ
                 push 0
                 push esi
                 push [hConfigurationsKey]
@@ -510,7 +510,7 @@ proc IterSensorConfigurations pwszDeviceInstanceId:DWORD, fnFilter:DWORD, pUser:
                 push eax
                 push dword [eax]
                 call [RegCloseKey]
-                push KEY_READ + KEY_WOW64_32KEY + KEY_SET_VALUE
+                push KEY_READ + KEY_SET_VALUE
                 push 0
                 lea eax, [szKey]
                 push eax
@@ -637,7 +637,7 @@ proc InstallDatabaseForSensor guid:DWORD, wszDeviceInstanceId:DWORD
                 lea eax, [.hDbKey]
                 lea edi, [.szDbKey]
                 push eax
-                push KEY_READ + KEY_WOW64_32KEY
+                push KEY_READ
                 push 0
                 push edi
                 push HKEY_LOCAL_MACHINE
@@ -1001,11 +1001,11 @@ proc UninstallDatabase guid:DWORD
                 test eax, eax
                 pop eax
                 jnz .skip
-                push esp;[.guid]
+                push esp ; [.guid]
                 push esi
                 call StringToGuid
                 test eax, eax
-                mov esi, esp;lea edi, [.guid]
+                mov esi, esp ; lea esi, [.guid]
                 jz .skip
 
                 push 16
@@ -1028,7 +1028,7 @@ proc UninstallDatabase guid:DWORD
                 ; Delete from WbioSvc databases key
                 lea eax, [hDatabasesKey]
                 push eax
-                push KEY_READ + KEY_WOW64_32KEY + KEY_SET_VALUE
+                push KEY_READ + KEY_SET_VALUE
                 push 0
                 push database.szDatabasesKey
                 push HKEY_LOCAL_MACHINE
@@ -1043,7 +1043,7 @@ proc UninstallDatabase guid:DWORD
 
                 lea eax, [hKey]
                 push eax
-                push KEY_READ + KEY_WOW64_32KEY
+                push KEY_READ
                 push 0
                 push esi
                 push [hDatabasesKey]
@@ -1245,7 +1245,7 @@ Regaux:
                 mov eax, [.braces]
                 lea ecx, [36+1+2*eax]
                 xor eax, 1
-                lea edx, [esp+eax] ;lea edx, [.szGUID]
+                lea edx, [esp+eax] ; lea edx, [.szGUID]
                 mov byte [edx+ecx-1], 0
 
                 push ecx

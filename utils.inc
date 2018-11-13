@@ -59,7 +59,7 @@ ValidateGuidString:
                 push ebx
                 push edi
                 mov ebx, utils.asciiDigitValueTable
-                mov edi, dword [esp + 2*4 + 4];[szGUID]
+                mov edi, dword [esp + 2*4 + 4] ; [szGUID]
 
                 push edi
                 call [lstrlenA]
