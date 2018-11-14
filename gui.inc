@@ -958,7 +958,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 ;--------------------------------------------------------------------------;
 
 .WM_TRAY:       mov edx, [lParam]
-                cmp edx, WM_LBUTTONDBLCLK ;WM_LBUTTONDOWN
+                cmp edx, WM_LBUTTONDBLCLK ; WM_LBUTTONDOWN
                 jnz @f
                 call ebx ; .get_ebx_ctx
                 push [ebx + CONTEXT.win.hwnd]
@@ -1050,14 +1050,10 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 jnz .start_enroll
                 retn
 
-.id_error:      sub esp, 60h
-                mov ecx, esp
-                push eax
-                push gui.szIdentifyError
-                push ecx
-                call [wsprintfA]
-                mov edx, [esp]
-                ;add esp, 60h + 4*3 ; leave balances stack later
+.id_error:      push eax
+                push STATUS_ERROR
+                call SetStatus
+                xor edx, edx
                 jmp .winbio_error
 
 .identified:    mov eax, [esi + WINBIO_ASYNC_RESULT.Identify.dwSubFactor]
@@ -1229,6 +1225,8 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
 .winbio_error:  or [ebx + CONTEXT.dwState], STATE_ERROR
                 and [ebx + CONTEXT.dwState], not STATE_INITIALIZING
+                test edx, edx
+                jz .winbio_done
                 push MB_ICONERROR or MB_OK
                 push gui.szError
                 push edx

@@ -102,8 +102,6 @@ align 2
 .szEnumerationError db 'Error enumerating biometric devices.',0
 .szSensor404Error   db 'Sensor device not found (is the sensor attached?)',0
 .szSessionError     db 'Error opening WinBio session.',0
-.szIdentifyError    db 'Identify error (0x%08X)',0dh,0ah,0dh,0ah
-                    db 'Restart the program',0
 .szUninstallError   db 'Uninstallation failed',0
 
 .szStatusDefault = $-1 ; Empty string
