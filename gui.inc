@@ -361,8 +361,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push [ebx + CONTEXT.winList.pos.x]
                 push WS_CHILD or WS_VISIBLE or WS_BORDER or \
                      WS_GROUP or WS_TABSTOP or \
-                     LVS_REPORT or LVS_EDITLABELS or \
-                     LVS_SINGLESEL or LVS_SHOWSELALWAYS
+                     LVS_REPORT or LVS_SINGLESEL or LVS_SHOWSELALWAYS
                 push gui.szEmpty
                 push gui.szListViewClass
                 push 0
