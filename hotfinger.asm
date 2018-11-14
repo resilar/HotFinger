@@ -418,7 +418,7 @@ IDC_STATIC_MESSAGE = 2002
 IDC_LIST_SENSORS   = 2003
 
 ; About dialog
-IDC_STATIC_ICON = 3000
+IDC_SYSLINK = 3000
 
 ; Icons
 IDI_MAIN = 401
@@ -444,12 +444,13 @@ IDI_MAIN = 401
     dialogitem 'SysListView32','', IDC_LIST_SENSORS, 4,4,DLG_WIDTH-8,DLG_HEIGHT-24, WS_VISIBLE+WS_BORDER+WS_TABSTOP+LVS_REPORT+LVS_SINGLESEL+LVS_SHOWSELALWAYS
   enddialog
 
-  dialog about_dialog,'About', 40,40,170,60, WS_CAPTION+WS_POPUP+WS_SYSMENU+DS_MODALFRAME
-    dialogitem 'STATIC', <'HotFinger application launcher',0dh,0ah,'https://github.com/resilar/HotFinger'>, -1, 24,10,146,40,WS_VISIBLE+SS_CENTER
+  dialog about_dialog, 'About', 40,40,160,55, WS_CAPTION+WS_POPUP+WS_SYSMENU+DS_MODALFRAME
+    dialogitem 'STATIC', <'HotFinger application launcher'>, -1, 36,10,120,10, WS_VISIBLE
+    dialogitem 'SysLink', <'<a>https://github.com/resilar/HotFinger</a>'>, IDC_SYSLINK, 36,20,120,10, WS_VISIBLE
     dialogitem 'STATIC', IDI_MAIN, -1, 8,8,32,32, WS_VISIBLE+SS_ICON
-    dialogitem 'STATIC', '', -1, 4,35,162,11, WS_VISIBLE+SS_ETCHEDHORZ
-    dialogitem 'STATIC', <'HotFinger v0.0.0'>, -1, 4,44,100,22, WS_VISIBLE+SS_LEFT
-    dialogitem 'BUTTON', 'OK', IDOK, 124,40,42,16, WS_VISIBLE+WS_TABSTOP+BS_DEFPUSHBUTTON
+    dialogitem 'STATIC', '', -1, 4,35,152,11, WS_VISIBLE+SS_ETCHEDHORZ
+    dialogitem 'STATIC', <'HotFinger v0.0.0'>, -1, 4,42,100,10, WS_VISIBLE+SS_LEFT
+    dialogitem 'BUTTON', 'OK', IDOK, 114,38,42,14, WS_VISIBLE+WS_TABSTOP+BS_DEFPUSHBUTTON
   enddialog
 
   icon main_icon, icon_data, 'sysclass.ico'

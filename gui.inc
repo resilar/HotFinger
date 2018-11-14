@@ -1342,7 +1342,18 @@ proc AboutDialogProc hdlg:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 mov eax, [msg]
                 sub eax, WM_CLOSE ; cmp eax, WM_CLOSE
                 jz .close
-                sub eax, WM_COMMAND - WM_CLOSE ; cmp eax, WM_COMMAND
+                sub eax, WM_NOTIFY - WM_CLOSE ; cmp eax, WM_NOTIFY
+                jnz @f
+                mov eax, [lParam]
+                cmp [eax + NMHDR.idFrom], IDC_SYSLINK
+                jnz .exit
+                cmp [eax + NMHDR.code], NM_CLICK
+                jnz .exit
+                call WndProc.IDM_GITHUB
+                jmp .exit
+@@:             sub eax, WM_COMMAND - WM_NOTIFY ; cmp eax, WM_COMMAND
+                jnz .exit
+                cmp [wParam], IDOK + (BN_CLICKED shl 16)
                 jnz .exit
 .close:         ; push 0
                 push [hdlg]
