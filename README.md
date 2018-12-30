@@ -14,7 +14,7 @@ version](https://github.com/resilar/HotFinger/releases/latest). ***TODO***
 good chance that the program will not work because of some subtle difference in
 your specific fingerprint reader or driver. If so, [opening a new
 issue](https://github.com/resilar/HotFinger/issues/new) would be highly
-appreciated (include error messages and other debug information).
+appreciated (include error messages and other debug information if possible).
 
 
 ## Features
