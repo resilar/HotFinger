@@ -1476,63 +1476,88 @@ CalculateWindowPositions:
 
                 pop ecx
                 pop edx
-
                 sub edx, eax
 
-                virtual at ebx
-                  .ctx CONTEXT
-                end virtual
+                push edi
+                lea edi, [ebx + CONTEXT_FIRST_WINDOW_OFFSET + sizeof.WIN.hwnd]
 
                 ; List
+                ; scasd ; add edi, sizeof.WIN.hwnd
+                push 5
+                pop eax
+                stosd ; mov [.ctx.winList.pos.x], 5
+                stosd ; mov [.ctx.winList.pos.y], 5
                 lea eax, [ecx-10]
-                mov [.ctx.winList.pos.cx], eax
+                stosd ; mov [.ctx.winList.pos.cx], eax
                 lea eax, [edx-20-24-25-1-14]
-                mov [.ctx.winList.pos.cy], eax
-                mov [.ctx.winList.pos.x], 5
-                mov [.ctx.winList.pos.y], 5
+                stosd ; mov [.ctx.winList.pos.cy], eax
 
                 ; Info
-                lea eax, [ecx-10]
-                mov [.ctx.winInfo.pos.cx], eax
+                scasd ; add edi, sizeof.WIN.hwnd
+                push 5
+                pop eax
+                stosd ; mov [.ctx.winInfo.pos.x], 5
                 lea eax, [edx-20-24-25-7]
-                mov [.ctx.winInfo.pos.y], eax
+                stosd ; mov [.ctx.winInfo.pos.y], eax
                 neg eax
+                push eax
+                lea eax, [ecx-10]
+                stosd ; mov [.ctx.winInfo.pos.cx], eax
+                pop eax
                 lea eax, [eax+edx-4]
-                mov [.ctx.winInfo.pos.cy], eax
-                mov [.ctx.winInfo.pos.x], 5
+                stosd ; mov [.ctx.winInfo.pos.cy], eax
 
                 ; Path
-                mov [.ctx.winPath.pos.cy], 20
-                lea eax, [ecx-64+5]
-                mov [.ctx.winPath.pos.cx], eax
+                scasd ; add edi, sizeof.WIN.hwnd
+                push 11
+                pop eax
+                stosd ; mov [.ctx.winPath.pos.x], 11
                 lea eax, [edx-14-20-24]
-                mov [.ctx.winPath.pos.y], eax
-                mov [.ctx.winPath.pos.x], 11
+                stosd ; mov [.ctx.winPath.pos.y], eax
+                lea eax, [ecx-64+5]
+                stosd ; mov [.ctx.winPath.pos.cx], eax
+                push 20
+                pop eax
+                stosd ; mov [.ctx.winPath.pos.cy], 20
 
                 ; Browse
-                mov [.ctx.winBrowse.pos.cy], 20+1+1
-                mov [.ctx.winBrowse.pos.cx], 38
-                lea eax, [edx-14-20-24-1]
-                mov [.ctx.winBrowse.pos.y], eax
+                scasd ; add edi, sizeof.WIN.hwnd
                 lea eax, [ecx-68 + 20]
-                mov [.ctx.winBrowse.pos.x], eax
+                stosd ; mov [.ctx.winBrowse.pos.x], eax
+                lea eax, [edx-14-20-24-1]
+                stosd ; mov [.ctx.winBrowse.pos.y], eax
+                push 38
+                pop eax
+                stosd ; mov [.ctx.winBrowse.pos.cx], 38
+                push 20+1+1
+                pop eax
+                stosd ; mov [.ctx.winBrowse.pos.cy], 20+1+1
 
                 ; Enroll
-                mov [.ctx.winEnroll.pos.cy], 24
-                mov [.ctx.winEnroll.pos.cx], 74
+                scasd ; add edi, sizeof.WIN.hwnd
+                mov al, 10
+                stosd ; mov [.ctx.winEnroll.pos.x], 10
                 lea eax, [edx-20-14]
-                mov [.ctx.winEnroll.pos.y], eax
-                mov [.ctx.winEnroll.pos.x], 10
+                stosd ; mov [.ctx.winEnroll.pos.y], eax
+                push 74
+                pop eax
+                stosd ; mov [.ctx.winEnroll.pos.cx], 74
+                mov al, 24
+                stosd ; mov [.ctx.winEnroll.pos.cy], 24
 
                 ; Status
-                add eax, 6
-                mov [.ctx.winStatus.pos.x], 88
-                mov [.ctx.winStatus.pos.y], eax
+                scasd ; add edi, sizeof.WIN.hwnd
+                mov al, 88
+                stosd ; mov [.ctx.winStatus.pos.x], 88
+                lea eax, [edx-20-14+6]
+                stosd ; mov [.ctx.winStatus.pos.y], eax
                 lea eax, [ecx-84-15]
-                mov [.ctx.winStatus.pos.cy], 17
-                mov [.ctx.winStatus.pos.cx], eax
+                stosd ; mov [.ctx.winStatus.pos.cx], eax
+                push 17
+                pop dword [edi] ; mov [.ctx.winStatus.pos.cy], 17
 
-                ret
+                pop edi
+                retn
 
 .status_bar_height:
                 sub esp, sizeof.RECT
