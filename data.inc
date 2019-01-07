@@ -114,6 +114,7 @@ align 2
 .szStatusCommitted   db 'Committed',0
 .szStatusDiscarded   db 'Discarded',0
 .szStatusIdentifying db 'Identifying',0
+.szStatusIdentified  db 'GUID %s',0
 
 .bEnrollCounter db 0
 

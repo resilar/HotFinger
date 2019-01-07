@@ -25,8 +25,8 @@ IDM_ABOUT       = WM_USER+302
 WIN_WIDTH  = 400
 WIN_HEIGHT = 370
 
-WIN_WIDTH_MIN  = WIN_WIDTH-50
-WIN_HEIGHT_MIN = 205
+WIN_WIDTH_MIN  = 320
+WIN_HEIGHT_MIN = 210
 
 SUBFACTOR_MIN = 1       ; R Thumb
 SUBFACTOR_MAX = 10      ; L Little
@@ -43,6 +43,7 @@ STATUS_DISCARDING  = 6
 STATUS_COMMITTED   = 7
 STATUS_DISCARDED   = 8
 STATUS_IDENTIFYING = 9
+STATUS_IDENTIFIED  = 10
 
 SS_ENDELLIPSIS = 4000h
 
@@ -1061,6 +1062,15 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push eax
                 call SetSelection
                 call RunSubFactorCommand
+
+                cmp [esi + WINBIO_ASYNC_RESULT.Identify.Identity.dwType], WINBIO_ID_TYPE_GUID
+                jnz .id_retry
+
+                lea eax, [esi + WINBIO_ASYNC_RESULT.Identify.Identity.guidTemplate]
+                push eax
+                push STATUS_IDENTIFIED
+                call SetStatus
+
 .id_retry:      call .start_identify
                 jmp .winbio_done
 
@@ -1476,7 +1486,7 @@ CalculateWindowPositions:
                 ; List
                 lea eax, [ecx-10]
                 mov [.ctx.winList.pos.cx], eax
-                lea eax, [edx-20-24-25-1-10-5]
+                lea eax, [edx-20-24-25-1-14]
                 mov [.ctx.winList.pos.cy], eax
                 mov [.ctx.winList.pos.x], 5
                 mov [.ctx.winList.pos.y], 5
@@ -1484,25 +1494,25 @@ CalculateWindowPositions:
                 ; Info
                 lea eax, [ecx-10]
                 mov [.ctx.winInfo.pos.cx], eax
-                lea eax, [edx-20-24-25-1-8]
+                lea eax, [edx-20-24-25-7]
                 mov [.ctx.winInfo.pos.y], eax
                 neg eax
-                lea eax, [eax+edx-5]
+                lea eax, [eax+edx-4]
                 mov [.ctx.winInfo.pos.cy], eax
                 mov [.ctx.winInfo.pos.x], 5
 
                 ; Path
                 mov [.ctx.winPath.pos.cy], 20
-                lea eax, [ecx-68+5]
+                lea eax, [ecx-64+5]
                 mov [.ctx.winPath.pos.cx], eax
-                lea eax, [edx-15-20-25]
+                lea eax, [edx-14-20-24]
                 mov [.ctx.winPath.pos.y], eax
-                mov [.ctx.winPath.pos.x], 15
+                mov [.ctx.winPath.pos.x], 11
 
                 ; Browse
                 mov [.ctx.winBrowse.pos.cy], 20+1+1
-                mov [.ctx.winBrowse.pos.cx], 35
-                lea eax, [edx-15-20-25-1]
+                mov [.ctx.winBrowse.pos.cx], 38
+                lea eax, [edx-14-20-24-1]
                 mov [.ctx.winBrowse.pos.y], eax
                 lea eax, [ecx-68 + 20]
                 mov [.ctx.winBrowse.pos.x], eax
@@ -1510,16 +1520,16 @@ CalculateWindowPositions:
                 ; Enroll
                 mov [.ctx.winEnroll.pos.cy], 24
                 mov [.ctx.winEnroll.pos.cx], 74
-                lea eax, [edx-20-15]
+                lea eax, [edx-20-14]
                 mov [.ctx.winEnroll.pos.y], eax
-                mov [.ctx.winEnroll.pos.x], 15
+                mov [.ctx.winEnroll.pos.x], 10
 
                 ; Status
                 add eax, 6
-                mov [.ctx.winStatus.pos.x], 93
+                mov [.ctx.winStatus.pos.x], 88
                 mov [.ctx.winStatus.pos.y], eax
-                lea eax, [ecx-94-10-5]
-                mov [.ctx.winStatus.pos.cy], 14
+                lea eax, [ecx-84-15]
+                mov [.ctx.winStatus.pos.cy], 17
                 mov [.ctx.winStatus.pos.cx], eax
 
                 ret
@@ -1985,6 +1995,30 @@ proc SetSelection dwFactor:DWORD
                 ret
 endp
 
+; STATUS_ENROLLING case handled here to avoid 5-byte encoding of jz-branches.
+; See SetStatus function below.
+SetStatus.enrolling:
+                mov eax, 'Enro'
+                mov edi, esp ; lea edi, [.szBuf]
+                push edi
+                stosd
+                mov eax, 'llin'
+                stosd
+                mov ax, 'g '
+                stosw
+                movzx ecx, byte [gui.bEnrollCounter]
+                inc ecx
+                mov al, '.'
+                mov ah, cl
+                rep stosb
+                mov [edi], cl
+                cmp ah, 3
+                jb @f
+                xor ah, ah
+@@:             mov byte [gui.bEnrollCounter], ah
+                pop eax
+                jmp SetStatus.set_text
+
 ;proc SetStatus
 ;proc SetStatus szText:DWORD
 SetStatus:
@@ -2007,7 +2041,7 @@ SetStatus:
                 jz .set_text
                 add eax, gui.szStatusEnrolling - gui.szStatusEnrolled ; unused
                 dec ecx ; STATUS_ENROLLING (3)
-                jz .enrolling
+                jz SetStatus.enrolling
                 add eax, gui.szStatusError - gui.szStatusEnrolling
                 dec ecx ; STATUS_ERROR (4)
                 jz .error
@@ -2024,31 +2058,26 @@ SetStatus:
                 dec ecx ; STATUS_DISCARDED (8)
                 jz .set_text
                 add eax, gui.szStatusIdentifying - gui.szStatusDiscarded
-                dec ecx ; STATUS_IDENTIFYING (10)
+                dec ecx ; STATUS_IDENTIFYING (9)
                 jz .set_text
+                add eax, gui.szStatusIdentified - gui.szStatusIdentifying
+                dec ecx ; STATUS_IDENTIFIED (10)
+                jz .identified
                 mov eax, [.arg0]
                 jmp .set_text
 
-.enrolling:     mov eax, 'Enro'
-                lea edi, [.szBuf]
-                push edi
-                stosd
-                mov eax, 'llin'
-                stosd
-                mov ax, 'g '
-                stosw
-                movzx ecx, byte [gui.bEnrollCounter]
-                inc ecx
-                mov al, '.'
-                mov ah, cl
-                rep stosb
-                mov [edi], cl
-                cmp ah, 3
-                jb @f
-                xor ah, ah
-@@:             mov byte [gui.bEnrollCounter], ah
+.set_text:
+.set_text4:     push 4 ; 1 arg
+.set_textn:     push eax
+                push 0
+                push WM_SETTEXT
+                push [ebx + CONTEXT.winStatus.hwnd]
+                call [SendMessageA]
                 pop eax
-                jmp .set_text
+                add esp, .allocaSize
+                pop ecx
+                add esp, eax
+                jmp ecx
 
 .error:         mov ecx, eax
                 mov edx, [.arg1]
@@ -2068,21 +2097,21 @@ SetStatus:
                 call [wsprintfA]
                 leave
                 mov eax, esp
+.set_text8:     push 8
+                jmp .set_textn
 
-.set_text8:     push 8 ; 2 args
-                jmp @f
-.set_text:
-.set_text4:     push 4 ; 1 arg
-@@:             push eax
-                push 0
-                push WM_SETTEXT
-                push [ebx + CONTEXT.winStatus.hwnd]
-                call [SendMessageA]
-                pop eax
-                add esp, .allocaSize
-                pop ecx
-                add esp, eax
-                jmp ecx
+.identified:    mov ecx, esp
+                push gui.szEmpty
+                push eax
+                push ecx
+                call [wsprintfA]
+                add esp, 3*4h
+                lea eax, [esp+eax]
+                push eax
+                push [.arg1+4]
+                call GuidToString
+                mov eax, esp
+                jmp .set_text8
 
 proc SaveSettings
                 local rect:RECT
