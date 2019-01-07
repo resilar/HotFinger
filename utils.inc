@@ -241,15 +241,15 @@ endp
 
 ;proc WinBioErrorText dwErrorCode:DWORD
 WinBioErrorText:
-                mov eax, [esp + 4]
+                pop eax
+                xchg [esp], eax
                 sub eax, WINBIO_E_MIN
-                jz .no_winbio_err
                 cmp eax, WINBIO_E_MAX - WINBIO_E_MIN
                 ja .no_winbio_err
                 mov eax, [utils.pszErrorTextTable + eax*4]
-                retn 4
+                retn
 .no_winbio_err: xor eax, eax
-                retn 4
+                retn
 
 ;--------------------------------------------------------------------------;
 ; Run command as admin with ShellExecuteW
