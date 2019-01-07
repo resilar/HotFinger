@@ -6,25 +6,57 @@ launcher with **HotFinger** (like hot*key* but for *finger*s, get it?)
 
 ![Screenshot](https://i.imgur.com/VAwqHb0.png)
 
-[Download the latest
-version](https://github.com/resilar/HotFinger/releases/latest). ***TODO***
-*Prepare a release package.*
+System requirements include Windows 10 operating system and a working
+fingerprint reader.
 
-**Requirements**: Windows 10 and a working fingerprint reader. There is always a
-good chance that the program will not work because of some subtle difference in
-your specific fingerprint reader or driver. If so, [opening a new
-issue](https://github.com/resilar/HotFinger/issues/new) would be highly
-appreciated (include error messages and other debug information if possible).
+[Download the latest version
+here](https://github.com/resilar/HotFinger/releases/latest).
+***TODO*** *Prepare a release package*
 
 
 ## Features
 
-- Bind commands to all ten fingers
+- Bind commands to fingerprints
+  - Supported commands include ...
+    - Launching an application (with or without arguments)
+    - Opening directory in the Windows file browser
+    - Opening URL in your favorite web browser
+    - Whatever else
+      [`ShellExecute()`](https://docs.microsoft.com/en-us/windows/desktop/api/shellapi/nf-shellapi-shellexecutea)
+      can do
+  - All **ten** fingers supported!
 - Written in assembler
   - So it's blazingly fast
-  - And crazy small (42KB which includes an 18KB icon)
-- High DPI aware GUI (hey it's 2018)
+  - And crazy small (42KB including an 18KB icon)
+- High DPI aware GUI (come on, it's 2019)
+- Uninstaller that sucks less
+  - *Clean* uninstalls
+    - No config files left lying around
+    - ... nor WinBio database files
+    - ... nor registry settings
+  - Trigger via the menu: `Options > Uninstall`
 - Minimize to tray
+
+
+## Requirements
+
+- **Windows 10** \
+  Windows 7 is unsupported because HotFinger uses a few DPI-aware WinAPI
+  functions that were first added in Windows 10 (version 1607). Thus, starting
+  HotFinger on Windows 7 gives an error message titled: *Entry Point Not Found*.
+  However, implementing Windows 7 support is a straightforward task: simply call
+  DPI-**un**aware versions of the WinAPI functions if DPI-aware versions are
+  unavailable. If someone implements Windows 7 support
+  [cleverly](https://docs.microsoft.com/en-us/windows/desktop/Dlls/using-run-time-dynamic-linking)
+  (that is, without affecting the high-DPI scaling behavior on Windows 10), feel
+  free to submit a pull request to this repository.
+
+- **Fingerprint reader** \
+  There is always a good chance that the program will not work because of some
+  subtle difference in your specific fingerprint reader or associated driver(s).
+  If so, [opening a new issue](https://github.com/resilar/HotFinger/issues/new)
+  would be highly appreciated. Remember to include error messages and other
+  debug information if possible.
 
 
 ## Geeks
@@ -41,7 +73,7 @@ This is "Rants of an Old x86 Assembly Coder" section disguised as "Questions and
 Answers" section. Stop reading. Nothing significant follows.
 
 
-#### Why x86 assembly in 2018?
+#### Why x86 assembly in ~~2018~~THE CURRENT YEAR?
 
 Mostly as a demonstration to show that it is still possible to write GUI
 applications for Windows without tons of bloated libraries and dependencies.
@@ -66,7 +98,7 @@ whereas full operating systems are typically written in FASM (see
 [DexOS](http://dex-os.github.io/), [KolibriOS](http://www.kolibrios.org/en/),
 [MenuetOS](http://menuetos.net/), ...). In other words, FASM is the
 assembler-of-choice for large x86 assembly projects, while shitty assemblers can
-be bearable with small projects like single functions.
+be bearable in small projects like single functions.
 
 MASM syntax is braindead for obfuscating memory operands (e.g., `LEA` and
 `offset` stupidity); for fuck's sake, do not hide memory references from the
@@ -108,7 +140,7 @@ intuitive from the perspective of an x86 programmer. Additionally, the
 stack-based argument passing of stdcall often produces more compact code (for
 example, the encoding of `MOV ECX, 42` is 5 bytes long, whereas `PUSH 42` takes
 only 2 bytes). Shorter instruction encodings can yield significant performance
-improvements due to potentially more efficient cache usage.
+improvements due to potentially more efficient cache utilization.
 
 
 #### Why no `invoke` or control-flow macros?
