@@ -450,7 +450,7 @@ IDI_MAIN = 401
     dialogitem 'SysLink', <'<a>https://github.com/resilar/HotFinger</a>'>, IDC_SYSLINK, 36,20,120,10, WS_VISIBLE
     dialogitem 'STATIC', IDI_MAIN, -1, 8,8,32,32, WS_VISIBLE+SS_ICON
     dialogitem 'STATIC', '', -1, 4,35,152,11, WS_VISIBLE+SS_ETCHEDHORZ
-    dialogitem 'STATIC', <'HotFinger v0.0.0'>, -1, 4,42,100,10, WS_VISIBLE+SS_LEFT
+    dialogitem 'STATIC', <'HotFinger v0.1.0'>, -1, 4,42,100,10, WS_VISIBLE+SS_LEFT
     dialogitem 'BUTTON', 'OK', IDOK, 114,38,42,14, WS_VISIBLE+WS_TABSTOP+BS_DEFPUSHBUTTON
   enddialog
 
@@ -478,8 +478,8 @@ IDI_MAIN = 401
   versioninfo version, \
     VOS__WINDOWS32, VFT_APP,VFT2_UNKNOWN, LANG_ENGLISH+SUBLANG_DEFAULT, 0, \
     'FileDescription',  'Biometric hotkeys', \
-    'FileVersion',      '0.0.0.0', \
+    'FileVersion',      '0.1.0.0', \
     'ProductName',      'HotFinger', \
-    'ProductVersion',   '0.0.0', \
+    'ProductVersion',   '0.1.0', \
     'LegalCopyright',   'UNLICENSE', \
     'OriginalFilename', 'hotfinger.exe'
