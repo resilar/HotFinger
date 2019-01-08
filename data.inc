@@ -90,6 +90,8 @@ align 2
 .szBrowse        db 'Browse',0
 .szEnroll        db '&Enroll',0
 .szDiscard       db '&Discard',0
+.szUnenroll      db 'U&nenroll',0
+.szCancel        db '&Cancel',0
 .szError = hotfinger.szError
 
 .szBrowseFilter  db 'Executables (*.exe)',0, '*.exe',0
@@ -115,6 +117,13 @@ align 2
 .szStatusDiscarded   db 'Discarded',0
 .szStatusIdentifying db 'Identifying',0
 .szStatusIdentified  db 'GUID %s',0
+.szStatusDeleting    db 'Kill %s',0
+.szStatusDeleted     db 'Dead %s',0
+
+.szUnenrollCaption   db 'Unenrollment confirmation',0
+.szUnenrollFormat    db 'Delete enrolled template?',0dh,0ah,0dh,0ah
+                     db 'GUID %s',0
+.szUnenrollFormat.size = $ - .szUnenrollFormat
 
 .bEnrollCounter db 0
 

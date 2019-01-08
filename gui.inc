@@ -44,6 +44,8 @@ STATUS_COMMITTED   = 7
 STATUS_DISCARDED   = 8
 STATUS_IDENTIFYING = 9
 STATUS_IDENTIFIED  = 10
+STATUS_DELETING    = 11
+STATUS_DELETED     = 12
 
 SS_ENDELLIPSIS = 4000h
 
@@ -92,37 +94,44 @@ struct WIN
   pos POS
 ends
 
-STATE_READY            = 0x00000000
-STATE_INITIALIZING     = 0x00000001
-STATE_ENROLLING        = 0x00000002
-STATE_IDENTIFYING      = 0x00000004
-STATE_ENROLL_REQUESTED = 0x00000008
-STATE_ERROR            = 0x80000000
+STATE_READY              = 0x00000000
+STATE_INITIALIZING       = 0x00000001
+STATE_ENROLLING          = 0x00000002
+STATE_IDENTIFYING        = 0x00000004
+STATE_UNENROLLING        = 0x00000008
+STATE_ENROLL_REQUESTED   = 0x00000010
+STATE_UNENROLL_REQUESTED = 0x00000020
+STATE_ERROR              = 0x80000000
 
 struct CONTEXT
-  win          WIN
-  pSettings    dd ?
-  dwUnitId     dd ?
-  dwState      dd ?
-  dwDPI        dd ?
+  win           WIN
+  pSettings     dd ?
+  dwUnitId      dd ?
+  dwState       dd ?
+  dwDPI         dd ?
 
-  hInst        dd ?
-  hFont        dd ?
-  hSession     dd ?
-  hFramework   dd ?
+  hInst         dd ?
+  hFont         dd ?
+  hSession      dd ?
+  hFramework    dd ?
 
-  hwndStatus   dd ?
-  hMenu        dd ?
-  hOptionsMenu dd ?
-  hHelpMenu    dd ?
-  hTrayMenu    dd ?
+  hwndStatus    dd ?
+  hMenu         dd ?
+  hOptionsMenu  dd ?
+  hHelpMenu     dd ?
+  hTrayMenu     dd ?
 
-  winList      WIN
-  winInfo      WIN
-  winPath      WIN
-  winBrowse    WIN
-  winEnroll    WIN
-  winStatus    WIN
+  winList       WIN
+  winInfo       WIN
+  winPath       WIN
+  winBrowse     WIN
+  winEnroll     WIN
+  winStatus     WIN
+
+  IdIdentity    WINBIO_IDENTITY
+  dwIdSubFactor dd ?
+  bUnenrollMode db ?
+  pad0          db 3 dup (?)
 ends
 CONTEXT_FIRST_WINDOW_OFFSET = CONTEXT.winList
 CONTEXT_WINDOW_COUNT = (sizeof.CONTEXT - CONTEXT_FIRST_WINDOW_OFFSET)/sizeof.WIN
@@ -824,15 +833,79 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 .IDC_ENROLL:    call ebx ; .get_ebx_ctx
 
                 mov eax, [ebx + CONTEXT.dwState]
-                test eax, STATE_ENROLLING or STATE_ENROLL_REQUESTED or STATE_IDENTIFYING
-                jz .start_enroll
+                test al, STATE_ENROLLING or STATE_UNENROLL_REQUESTED \
+                      or STATE_UNENROLLING or STATE_ENROLL_REQUESTED
+                jnz .enroll_cancel
 
-                or [ebx + CONTEXT.dwState], STATE_ENROLL_REQUESTED
+                ; Unenroll mode
+                cmp [ebx + CONTEXT.bUnenrollMode], 0
+                jz .enroll_mode
+
+                ; Ask unenrollment confirmation from the user
+                push ebp
+                mov ebp, esp
+                sub esp, gui.szUnenrollFormat.size-2 + 38
+
+                mov eax, esp
+                push gui.szEmpty
+                push gui.szUnenrollFormat
+                push eax
+                call [wsprintfA]
+                add esp, 3*4h
+
+                add eax, esp
+                lea ecx, [ebx + CONTEXT.IdIdentity.guidTemplate]
+                push eax
+                push ecx
+                call GuidToString
+
+                mov eax, esp
+                push MB_YESNOCANCEL or MB_ICONEXCLAMATION or MB_DEFBUTTON3
+                push gui.szUnenrollCaption
+                push eax
+                push [ebx + CONTEXT.win.hwnd]
+                call [MessageBoxA]
+                leave
+                cmp eax, IDYES
+                mov eax, [ebx + CONTEXT.dwState]
+                jnz .enroll_ret
+
+                test al, STATE_ENROLLING or STATE_IDENTIFYING or STATE_UNENROLLING
+                jz .unenroll
+                or [ebx + CONTEXT.dwState], STATE_UNENROLL_REQUESTED
+                jmp .enroll_cancel
+
+.unenroll:      and byte [ebx + CONTEXT.dwState], not STATE_UNENROLL_REQUESTED
+                lea eax, [ebx + CONTEXT.IdIdentity]
+                push dword [eax + sizeof.WINBIO_IDENTITY] ; dwIdSubFactor
+                push eax
+                push [ebx + CONTEXT.dwUnitId]
                 push [ebx + CONTEXT.hSession]
-                call [WinBioCancel]
+                call [WinBioDeleteTemplate]
+                test eax, eax
+                jnz .enroll_error
+                lea eax, [ebx + CONTEXT.IdIdentity.guidTemplate]
+                push eax
+                push STATUS_DELETING
+                call SetStatus
+                or [ebx + CONTEXT.dwState], STATE_UNENROLLING
+                call EnterEnrollmentMode
                 retn
 
-.start_enroll:  push LVNI_SELECTED
+                ; Enroll mode
+.enroll_mode:   test al, STATE_ENROLLING or STATE_IDENTIFYING or STATE_UNENROLLING
+                jz .enroll
+                or [ebx + CONTEXT.dwState], STATE_ENROLL_REQUESTED
+.enroll_cancel: push [ebx + CONTEXT.hSession]
+                call [WinBioCancel]
+.enroll_ret:    retn
+
+.enroll_error:  push eax
+                push STATUS_ERROR
+                call SetStatus
+                retn
+
+.enroll:        push LVNI_SELECTED
                 push -1
                 push LVM_GETNEXTITEM
                 push [ebx + CONTEXT.winList.hwnd]
@@ -847,16 +920,10 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push [ebx + CONTEXT.hSession]
                 call [WinBioEnrollBegin]
                 test eax, eax
-                jz .enrolling
-
-                push eax
-                push STATUS_ERROR
-                call SetStatus
-                retn
-
+                jnz .enroll_error
 .enrolling:     or [ebx + CONTEXT.dwState], STATE_ENROLLING
                 call EnterEnrollmentMode
-.enroll_ret:    retn
+                retn
 
 .IDM_PREFERENCES:
                 ; UNIMPLEMENTED
@@ -1030,26 +1097,20 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
 .id:            cmp al, WINBIO_OPERATION_IDENTIFY
                 jnz .enroll_begin
+                call LeaveUnenrollmentMode
 
                 mov eax, [esi + WINBIO_ASYNC_RESULT.dwApiStatus]
-                test eax, eax
                 ;mov ecx, [esi + WINBIO_ASYNC_RESULT.Identify.dwSubFactor]
                 ;mov ecx, [esi + WINBIO_ASYNC_RESULT.Identify.dwRejectDetail]
+                test eax, eax
                 jz .identified
                 and [ebx + CONTEXT.dwState], not STATE_IDENTIFYING
                 cmp eax, WINBIO_E_UNKNOWN_ID
                 jz .id_retry
+                cmp eax, WINBIO_E_CANCELED
+                jz .id_cancel
                 cmp eax, WINBIO_E_BAD_CAPTURE
                 jz .id_retry
-                cmp eax, WINBIO_E_CANCELED
-                jnz .id_error
-
-                test [ebx + CONTEXT.dwState], STATE_ENROLLING
-                jnz .winbio_done
-                push .winbio_done
-                test [ebx + CONTEXT.dwState], STATE_ENROLL_REQUESTED
-                jnz .start_enroll
-                retn
 
 .id_error:      push eax
                 push STATUS_ERROR
@@ -1057,20 +1118,41 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 xor edx, edx
                 jmp .winbio_error
 
-.identified:    mov eax, [esi + WINBIO_ASYNC_RESULT.Identify.dwSubFactor]
-                push eax
+.id_cancel:     push .winbio_done
+                test [ebx + CONTEXT.dwState], STATE_ENROLLING
+                jnz @f
+                test [ebx + CONTEXT.dwState], STATE_ENROLL_REQUESTED
+                jnz .enroll
+                test [ebx + CONTEXT.dwState], STATE_UNENROLL_REQUESTED
+                jnz .unenroll
+@@:             retn
+
+.identified:    cmp [esi + WINBIO_ASYNC_RESULT.Identify.Identity.dwType], WINBIO_ID_TYPE_GUID
+                mov eax, [esi + WINBIO_ASYNC_RESULT.Identify.dwSubFactor]
+                push eax ; for RunSubFactorCommand
+                jnz .run_command
+
                 push eax
                 call SetSelection
-                call RunSubFactorCommand
 
-                cmp [esi + WINBIO_ASYNC_RESULT.Identify.Identity.dwType], WINBIO_ID_TYPE_GUID
-                jnz .id_retry
+.set_unenroll_guid:
+                push esi
+                push edi
+                push sizeof.CONTEXT.IdIdentity
+                mov eax, [esi + WINBIO_ASYNC_RESULT.Identify.dwSubFactor]
+                add esi, WINBIO_ASYNC_RESULT.Identify.Identity
+                lea edi, [ebx + CONTEXT.IdIdentity]
+                pop ecx
+                lea edx, [edi + WINBIO_IDENTITY.guidTemplate]
+                rep movsb
+                stosd
+                pop edi
+                pop esi
 
-                lea eax, [esi + WINBIO_ASYNC_RESULT.Identify.Identity.guidTemplate]
-                push eax
-                push STATUS_IDENTIFIED
-                call SetStatus
+                push edx
+                call EnterUnenrollmentMode
 
+.run_command:   call RunSubFactorCommand
 .id_retry:      call .start_identify
                 jmp .winbio_done
 
@@ -1091,12 +1173,12 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 test eax, eax
                 jz .enroll_ok
                 cmp eax, WINBIO_E_CANCELED
-                jz .enroll_cancel
+                jz .enroll_discard
                 cmp eax, WINBIO_E_BAD_CAPTURE
                 jz .capture_more
                 cmp eax, WINBIO_I_MORE_DATA
                 jz .capture_more
-                ; jmp .enroll_err
+                ;jmp .enroll_err
 
 .enroll_err:    or [ebx + CONTEXT.dwState], STATE_ERROR
                 push eax
@@ -1105,8 +1187,8 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 ;push [ebx + CONTEXT.hSession]
                 ;call [WinBioEnrollDiscard]
                 ;jmp .winbio_done
-
-.enroll_cancel: push [ebx + CONTEXT.hSession]
+.enroll_discard:
+                push [ebx + CONTEXT.hSession]
                 call [WinBioEnrollDiscard]
                 jmp .winbio_done
 
@@ -1143,7 +1225,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 jmp .ack_req
 
 .discard:       cmp al, WINBIO_OPERATION_ENROLL_DISCARD
-                jnz .open_fw
+                jnz .delete
                 and [ebx + CONTEXT.dwState], not STATE_ENROLLING
                 push STATUS_DISCARDED
                 call SetStatus
@@ -1151,6 +1233,33 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 .ack_req:       test [ebx + CONTEXT.dwState], STATE_ENROLL_REQUESTED
                 jz .winbio_done
                 and [ebx + CONTEXT.dwState], not STATE_ENROLL_REQUESTED
+                call .start_identify
+                jmp .winbio_done
+
+.delete:        cmp al, WINBIO_OPERATION_DELETE_TEMPLATE
+                jnz .open_fw
+
+                mov ecx, [esi + WINBIO_ASYNC_RESULT.dwApiStatus]
+                jecxz .delete_ok
+.delete_error:  cmp ecx, WINBIO_E_CANCELED
+                mov al, STATUS_ERROR
+                jz .deleted
+                or [ebx + CONTEXT.dwState], STATE_ERROR
+                jmp .deleted
+
+.delete_ok:     mov al, WINBIO_ID_TYPE_GUID
+                mov ecx, WINBIO_E_INVALID_IDENTITY
+                cmp eax, [esi + WINBIO_ASYNC_RESULT.DeleteTemplate.Identity.dwType]
+                jnz .delete_error
+                mov al, STATUS_DELETED
+                lea ecx, [esi + WINBIO_ASYNC_RESULT.DeleteTemplate.Identity.guidTemplate]
+                ;jmp .deleted
+
+.deleted:       push ecx
+                push eax
+                call SetStatus
+                call LeaveEnrollmentMode
+                and [ebx + CONTEXT.dwState], not (STATE_UNENROLLING or STATE_UNENROLL_REQUESTED)
                 call .start_identify
                 jmp .winbio_done
 
@@ -1442,6 +1551,8 @@ HideTrayIcon:
 ; - EnterEnrollmentMode
 ; - LeaveEnrollmentMode
 ; - SetEnrollmentMode
+; - EnterUnenrollmentMode
+; - LeaveUnenrollmentMode
 ; - SetCommand
 ; - GetCommand
 ; - RunSubFactorCommand
@@ -1680,66 +1791,107 @@ LeaveEnrollmentMode:
 SetEnrollmentMode:
                 push ebx
                 push ebp
-                lea ebp, [ebx + CONTEXT.winList] ; This yields smaller offsets
-                virtual at ebp - CONTEXT.winList ; => shorter instructions
+                mov eax, gui.szEnroll
+                lea ecx, [eax + gui.szDiscard - gui.szEnroll]
+                lea edx, [eax + gui.szCancel - gui.szEnroll]
+                lea ebp, [ebx + CONTEXT.winEnroll] ; This yields smaller offsets
+                xor ebx, ebx
+                virtual at ebp - CONTEXT.winEnroll ; => shorter instructions
                   .ctx CONTEXT
                 end virtual
-                mov ebx, [esp + 2*4h + 4h] ; [bEnabled]
 
-                test ebx, ebx
-                jz .leaving_mode
-.entering_mode: push 1
-                pop ebx
-                push gui.szDiscard
-                jmp .set_text
-.leaving_mode:  push gui.szEnroll
-.set_text:      push [.ctx.winEnroll.hwnd]
-                call [SetWindowTextA]
+                cmp bl, [.ctx.bUnenrollMode]
+                cmovnz ecx, edx
+                cmp ebx, [esp + 2*4h + 4h] ; [bEnabled]
 
-.hwnd:          ; Enable/disable controls
-                push NULL
+                ; Push enable/disable controls to stack
+                push ebx ; NULL
                 push [.ctx.winList.hwnd]
                 push [.ctx.winPath.hwnd]
                 push [.ctx.winBrowse.hwnd]
-                xor ebx, 1
-.hwnd_next:     pop eax
-                test eax, eax
-                jz .hwnd_done
-                push ebx
+
+                ; Set enroll button text
+                setz bl
+                cmovnz eax, ecx
                 push eax
+                push [.ctx.winEnroll.hwnd]
+                call [SetWindowTextA]
+
+                ; Enable/disable controls form stack
+.hwnd_next:     pop ecx
+                jecxz .menu
+                push ebx
+                push ecx
                 call [EnableWindow]
                 jmp .hwnd_next
-.hwnd_done:
 
 .menu:          ; Enable/disable menu
-                test ebx, ebx
-                jz .menu_disable
-.menu_enable:   push MF_BYPOSITION
-                jmp @f
-.menu_disable:  push MF_BYPOSITION or MF_DISABLED or MF_GRAYED
-@@:             push [.ctx.hMenu]
+                ; ebx == 0 -> MF_BYPOSITION or MF_GRAYED or MF_DISABLED = 403h
+                ; ebx == 1 -> MF_BYPOSITION = 400h
+                lea ecx, [.ctx.hMenu]
+                dec ebx
+                and ebx, MF_GRAYED or MF_DISABLED ; (1|2) = 3
+                mov bh, MF_BYPOSITION shr 8 ; (400h >> 8) = 4
+                push ecx
+                push dword [ecx]
                 call [GetMenuItemCount]
-                mov ecx, eax
-                pop eax
+                dec eax
+                pop ecx
+                js .exit
 
                 ; ROP-chain EnableMenuItem calls and DrawMenuBar
-                dec ecx
-                js .menu_done
-                push [.ctx.win.hwnd]
-                push .menu_done
+                push [ecx - CONTEXT.hMenu + CONTEXT.win.hwnd] ; [.ctx.win.hwnd]
+                push .exit
                 mov edx, [DrawMenuBar]
-@@:             push eax
-                push ecx
+@@:             push ebx
+                push eax
                 push [.ctx.hMenu]
+                dec eax
                 push edx
                 mov edx, [EnableMenuItem]
-                dec ecx
                 jns @b
                 jmp edx
-.menu_done:
+
 .exit:          pop ebp
                 pop ebx
                 retn 4h
+
+; proc EnterUnenrollmentMode guid:DWORD
+EnterUnenrollmentMode:
+                pop eax
+                xchg [esp], eax
+                cmp [ebx + CONTEXT.bUnenrollMode], 0
+                jnz @f
+
+                push eax
+                push STATUS_IDENTIFIED
+                call SetStatus
+
+                push gui.szUnenroll
+                push 0
+                push WM_SETTEXT
+                push [ebx + CONTEXT.winEnroll.hwnd]
+                call [SendMessageA]
+
+                mov [ebx + CONTEXT.bUnenrollMode], 1
+@@:             retn
+
+;proc LeaveUnenrollmentMode
+LeaveUnenrollmentMode:
+                xor eax, eax
+                cmp [ebx + CONTEXT.bUnenrollMode], al
+                jz @f
+                mov [ebx + CONTEXT.bUnenrollMode], al
+
+                push gui.szEmpty
+                call SetStatus
+
+                push gui.szEnroll
+                push eax
+                push WM_SETTEXT
+                push [ebx + CONTEXT.winEnroll.hwnd]
+                call [SendMessageA]
+@@:             retn
 
 ;proc SetCommand iItem:DWORD, szText:DWORD
 ;                local item:LV_ITEM
@@ -1914,9 +2066,12 @@ endp
 
 proc UpdateSelection
                 local iItem:DWORD
-
                 push esi
 
+                ; Leave unenroll mode (if active)
+                call LeaveUnenrollmentMode
+
+                ; Get selected item
                 push LVNI_SELECTED
                 push -1
                 push LVM_GETNEXTITEM
@@ -2048,7 +2203,8 @@ SetStatus.enrolling:
 ;proc SetStatus szText:DWORD
 SetStatus:
                 virtual at esp
-                  .szBuf db 128 dup (?)
+                  .szBuf db 128 - 4*4 + 1 dup (?) ; 113 = 128 - 4*4 + 1
+                  .pad0  db 3 dup (?)             ; 113 + 3 = 116
                   .allocaSize = $ - $$
                   .retAddr dd ?
                   .arg0 dd ?
@@ -2087,10 +2243,15 @@ SetStatus:
                 jz .set_text
                 add eax, gui.szStatusIdentified - gui.szStatusIdentifying
                 dec ecx ; STATUS_IDENTIFIED (10)
-                jz .identified
+                jz .set_guid
+                add eax, gui.szStatusDeleting - gui.szStatusIdentified
+                dec ecx ; STATUS_DELETING (11)
+                jz .set_guid
+                add eax, gui.szStatusDeleted - gui.szStatusDeleting
+                dec ecx ; STATUS_DELETED (12)
+                jz .set_guid
                 mov eax, [.arg0]
-                jmp .set_text
-
+                ;jmp .set_text
 .set_text:
 .set_text4:     push 4 ; 1 arg
 .set_textn:     push eax
@@ -2125,7 +2286,7 @@ SetStatus:
 .set_text8:     push 8
                 jmp .set_textn
 
-.identified:    mov ecx, esp
+.set_guid:      mov ecx, esp
                 push gui.szEmpty
                 push eax
                 push ecx

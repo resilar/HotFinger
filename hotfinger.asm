@@ -395,6 +395,7 @@ section '.idata' import readable
         WinBioCancel,'WinBioCancel', \
         WinBioCloseFramework, 'WinBioCloseFramework', \
         WinBioCloseSession, 'WinBioCloseSession', \
+        WinBioDeleteTemplate, 'WinBioDeleteTemplate', \
         WinBioEnrollBegin, 'WinBioEnrollBegin', \
         WinBioEnrollCapture, 'WinBioEnrollCapture', \
         WinBioEnrollCommit, 'WinBioEnrollCommit', \
