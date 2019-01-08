@@ -1,7 +1,7 @@
 format PE GUI 4.0
 
 include 'win32a.inc'
-include 'winbio32.inc'
+include 'winbio.inc'
 
 ;-------------------------------------------------------------------------
 ; Program settings
