@@ -1,5 +1,7 @@
 align 16 ; chosen by fair dice roll. guaranteed to be random.
-guidDatabase db 00h,11h,22h,33h,44h,55h,66h,77h,88h,99h,0aah,0bbh,0cch,0ddh,0eeh,0ffh
+guidDatabase db 050h,0f8h,086h,053h
+             db 0a9h,02bh, 037h,013h, 0f6h,07bh
+             db 080h,0a0h,0c7h,06bh,023h,091h
 
 ;-------------------------------------------------------------------------;
 ; main.asm
