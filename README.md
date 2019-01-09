@@ -1,5 +1,3 @@
-**UNRELEASED PRE-ALPHA VERSION - USE AT YOUR OWN RISK!**
-
 You know that insecure fingerprint reader next to your laptop keyboard? Now you
 can turn it into something marginally useful by repurposing it as an application
 launcher with **HotFinger** (like hot*key* but for *finger*s, get it?)
