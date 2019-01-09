@@ -2,12 +2,6 @@
 ; Sensor dialog
 ;-------------------------------------------------------------------------;
 
-DLG_WIDTH = 350
-DLG_HEIGHT = 120
-
-DLG_WIDTH_MIN = 250
-DLG_HEIGHT_MIN = 80
-
 SCALE_DENOMINATOR = 1024
 
 struct SENSOR_PARAMS
@@ -332,11 +326,11 @@ proc SensorDialogProc hdlg:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push [hdlg]
                 call CalculatePixelScaleFactors
 
-                push DLG_HEIGHT_MIN
+                push IDD_SENSOR_HEIGHT_MIN
                 call DLU2PixelsY
                 push eax
 
-                push DLG_WIDTH_MIN
+                push IDD_SENSOR_WIDTH_MIN
                 call DLU2PixelsX
                 push eax
 
@@ -828,7 +822,7 @@ proc GetInitialDialogRect hdlg:DWORD, rect:DWORD
                 add [height], eax
 
                 ; Check that the resulting dimensions are within bounds
-                push DLG_WIDTH_MIN
+                push IDD_SENSOR_WIDTH_MIN
                 call DLU2PixelsX
                 cmp [width], eax
                 jae @f
@@ -845,7 +839,7 @@ proc GetInitialDialogRect hdlg:DWORD, rect:DWORD
                 jbe @f
                 mov [width], eax
 @@:
-                push DLG_HEIGHT_MIN
+                push IDD_SENSOR_HEIGHT_MIN
                 call DLU2PixelsY
                 cmp [height], eax
                 jae @f
