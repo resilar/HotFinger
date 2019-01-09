@@ -103,6 +103,9 @@ MASM syntax is braindead for obfuscating memory operands (e.g., `LEA` and
 programmer, ever. NASM is acceptable, although relying on an external linker
 sucks. GAS and AT&T syntax are full retard.
 
+See also: [flat assembler - Design Principles (or why flat assembler is
+different)](https://flatassembler.net/docs.php?article=design).
+
 
 #### Why not 64 bit?
 
