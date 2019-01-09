@@ -146,4 +146,4 @@ improvements due to potentially more efficient cache utilization.
 
 #### Why no `invoke` or control-flow macros?
 
-Macros are for pussies.
+Macros are for pussies. Just give up and go fucking write JavaScript or Python.
