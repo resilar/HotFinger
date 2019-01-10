@@ -1443,9 +1443,11 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push eax
                 push eax
                 push eax
+                push eax
                 call [WinBioCancel]
                 call [WinBioWait]
                 call [WinBioCloseSession]
+                call [WinBioWait]
 @@:             push STATUS_DEFAULT
                 call SetStatus
                 xor eax, eax
