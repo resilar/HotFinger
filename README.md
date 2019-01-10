@@ -40,15 +40,22 @@ here](https://github.com/resilar/HotFinger/releases/latest).
 ## Requirements
 
 - **Windows 10** \
-  Windows 7 is unsupported because HotFinger uses a few DPI-aware WinAPI
-  functions that were first added in Windows 10 (version 1607). Thus, starting
-  HotFinger on Windows 7 gives an error message titled: *Entry Point Not Found*.
-  However, implementing Windows 7 support is a straightforward task: simply call
-  DPI-**un**aware versions of the WinAPI functions if DPI-aware versions are
-  unavailable. If someone implements Windows 7 support
+  Windows 8 is unsupported because HotFinger uses a few DPI-aware WinAPI
+  functions that were first introduced in Windows 10 (version 1607). Thus,
+  starting HotFinger on Windows 8 gives an error message titled: *Entry Point
+  Not Found*. However, implementing Windows 8 support is a straightforward task:
+  simply call DPI-**un**aware versions of the WinAPI functions if DPI-aware
+  versions are unavailable. If someone implements Windows 8 support
   [cleverly](https://docs.microsoft.com/en-us/windows/desktop/Dlls/using-run-time-dynamic-linking)
   (that is, without affecting the high-DPI scaling behavior on Windows 10), feel
   free to submit a pull request to this repository.
+
+  Similarly, Windows 7 is unsupported because of the missing DPI-aware WinAPIs.
+  Windows 7 also lacks `WinBioAsync*` family of functions and asynchronous
+  WinBio sessions added in Windows 8 and used by HotFinger. Writing a
+  compatibility layer for Windows 7 is hence more difficult, although still
+  feasible with major effort. The basic idea is to emulate asynchronous WinBio
+  sessions using threads.
 
 - **Fingerprint reader** (compatible with [Windows Biometric
   Framework](https://docs.microsoft.com/en-us/windows/desktop/secbiomet/biometric-service-api-portal)) \
