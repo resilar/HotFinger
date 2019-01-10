@@ -242,43 +242,13 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 mov [ebxctx.win.hwnd], eax
                 call [SetWindowLongA]
 
+                ; Get default font
                 push NULL
                 call [GetModuleHandleA]
                 mov [ebxctx.hInst], eax
                 push DEFAULT_GUI_FONT
                 call [GetStockObject]
                 mov [ebxctx.hFont], eax
-
-                ; Create statusbar
-                mov eax, [ebxctx.pSettings]
-                mov ecx, MAX_PATH
-                sub esp, ecx
-                lea esi, [eax + SETTINGS.vol.wszDeviceInstanceId]
-                mov edi, esp
-                push esp
-@@:             lodsw
-                test ax, ax
-                jz @f
-                stosb
-                loop @b
-@@:             rep stosb
-                pop eax
-
-                push ecx
-                push [ebxctx.hInst]
-                push ecx
-                push [hwnd]
-                push ecx
-                push ecx
-                push ecx
-                push ecx
-                push WS_CHILD or WS_VISIBLE
-                push eax
-                push gui.szStatusClass
-                push ecx
-                call [CreateWindowExA]
-                mov [ebxctx.hwndStatus], eax
-                add esp, MAX_PATH
 
                 ; Create menu
                 call [CreateMenu]
@@ -366,6 +336,37 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
                 ; ... to calcluate child window positions
                 call CalculateWindowPositions
+
+                ; Create statusbar
+                mov eax, [ebxctx.pSettings]
+                mov ecx, MAX_PATH
+                sub esp, ecx
+                lea esi, [eax + SETTINGS.vol.wszDeviceInstanceId]
+                mov edi, esp
+                push esp
+@@:             lodsw
+                test ax, ax
+                jz @f
+                stosb
+                loop @b
+@@:             rep stosb
+                pop eax
+
+                push ecx
+                push [ebxctx.hInst]
+                push ecx
+                push [hwnd]
+                push [ebxctx.winStatus.pos.cy]
+                push [ebxctx.winStatus.pos.cx]
+                push [ebxctx.winStatus.pos.y]
+                push [ebxctx.winStatus.pos.x]
+                push WS_CHILD or WS_VISIBLE
+                push eax
+                push gui.szStatusClass
+                push ecx
+                call [CreateWindowExA]
+                mov [ebxctx.hwndStatus], eax
+                add esp, MAX_PATH
 
                 ; List
                 push NULL
