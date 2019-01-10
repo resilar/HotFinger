@@ -4,7 +4,8 @@ launcher with **HotFinger** (like hot*key* but for *finger*s, get it?)
 
 ![Screenshot](https://i.imgur.com/VAwqHb0.png)
 
-System requirements include Windows 10 operating system and a working
+System requirements include Windows 10 operating system and a
+[WBF-compatible](https://docs.microsoft.com/en-us/windows/desktop/secbiomet/biometric-service-api-portal)
 fingerprint reader.
 
 [Download the latest version
@@ -49,7 +50,8 @@ here](https://github.com/resilar/HotFinger/releases/latest).
   (that is, without affecting the high-DPI scaling behavior on Windows 10), feel
   free to submit a pull request to this repository.
 
-- **Fingerprint reader** \
+- **Fingerprint reader** (compatible with [Windows Biometric
+  Framework](https://docs.microsoft.com/en-us/windows/desktop/secbiomet/biometric-service-api-portal)) \
   There is always a good chance that the program will not work because of some
   subtle difference in your specific fingerprint reader or associated driver(s).
   If so, [opening a new issue](https://github.com/resilar/HotFinger/issues/new)
