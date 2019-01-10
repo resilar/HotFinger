@@ -58,6 +58,16 @@ here](https://github.com/resilar/HotFinger/releases/latest).
   would be highly appreciated. Remember to include error messages and other
   debug information if possible.
 
+- **Sane antivirus software** \
+  Unfortunately, [6/67 engines in
+  VirusTotal](https://www.virustotal.com/#/file-analysis/NzI2NmNkYWZjZjQ1NDlkNTEyMzQ1N2I2MGRmMmVkMzE6MTU0NzE0MjYyMg==)
+  flag `hotfinger.exe` as malicious. Out of these, 2 are false detections of
+  `Win32:MalOb-IJ [cryp]` and the remaining 4 are false positives reported by
+  heuristics. This normally would not be a big deal, but it turns out that the 6
+  antivirus engines falsely detecting `hotfinger.exe` include popular software
+  such as Avast, AVG, Cylance and Symantec. Therefore, add an exception for
+  `hotfinger.exe` in your antivirus if you use one of those products.
+
 
 ## Geeks
 
