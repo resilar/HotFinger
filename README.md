@@ -9,8 +9,7 @@ System requirements include Windows 10 operating system and a
 fingerprint reader.
 
 [Download the latest version
-here](https://github.com/resilar/HotFinger/releases/latest).
-***TODO*** *Prepare a release package*
+here](https://github.com/resilar/HotFinger/releases/latest). Happy fingering!
 
 
 ## Features
