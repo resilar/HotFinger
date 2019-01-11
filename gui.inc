@@ -694,9 +694,28 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 ;-------------------------------------------------------------------------;
 
 .WM_SYSCOMMAND: mov eax, [wParam]
-                cmp eax, SC_MINIMIZE
+                cmp eax, SC_MAXIMIZE
+                jnz @f
+                call ebx ; .get_ebx_ctx
+                call SaveSettingsGUI
+                push 1
+                mov eax, [ebxctx.pSettings]
+                pop [eax + SETTINGS.GUI.dwMaximized]
+                jmp .default
+
+@@:             cmp eax, SC_RESTORE
+                jnz @f
+                call ebx ; .get_ebx_ctx
+                xor eax, eax
+                mov ebx, [ebxctx.pSettings]
+                mov [ebx + SETTINGS.GUI.dwMinimized], eax
+                mov [ebx + SETTINGS.GUI.dwMaximized], eax
+                ; jmp .default
+
+@@:             cmp eax, SC_MINIMIZE
                 jnz .default
                 call ebx ; .get_ebx_ctx
+                call SaveSettingsGUI
                 push [hwnd]
                 call ShowTrayIcon
                 test eax, eax
@@ -1014,10 +1033,15 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
 
 .WM_NUDGE:      call ebx ; .get_ebx_ctx
                 mov eax, [hwnd]
+                mov ecx, [ebxctx.pSettings]
+                xor edx, edx
                 push eax ; [hwnd]
                 push eax ; [hwnd]
-                push SW_SHOW
-                push eax ; [hwnd]
+                push SW_SHOWMAXIMIZED
+                cmp [ecx + SETTINGS.GUI.dwMaximized], edx
+                jnz @f
+                add dword [esp], SW_SHOW - SW_SHOWMAXIMIZED
+@@:             push eax ; [hwnd]
                 call [ShowWindow]
                 call [SetForegroundWindow]
                 call [SetFocus]
@@ -1040,9 +1064,13 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 push [ebxctx.win.hwnd]
                 call HideTrayIcon
                 mov eax, [ebxctx.pSettings]
-                mov [eax + SETTINGS.GUI.dwMinimized], 0
-                push SW_SHOW
-                push [ebxctx.win.hwnd]
+                xor ecx, ecx
+                push SW_SHOWMAXIMIZED
+                mov [eax + SETTINGS.GUI.dwMinimized], ecx
+                cmp [eax + SETTINGS.GUI.dwMaximized], ecx
+                jnz .restore_max
+                add dword [esp], SW_SHOW - SW_SHOWMAXIMIZED
+.restore_max:   push [ebxctx.win.hwnd]
                 call [ShowWindow]
                 retn
 @@:
@@ -1405,8 +1433,7 @@ proc WndProc hwnd:DWORD, msg:DWORD, wParam:DWORD, lParam:DWORD
                 test eax, eax
                 xchg eax, ebx
                 jz .context_freed
-                mov eax, [ebxctx.pSettings]
-                call SaveSettings
+                call SaveSettingsAll
 
 .free_context:  call .winbio_close
 
@@ -1569,7 +1596,8 @@ HideTrayIcon:
 ; - RunSubFactorCommand
 ; - UpdateSelection
 ; - SetStatus
-; - SaveSettings
+; - SaveSettingsGUI
+; - SaveSettingsAll
 ;-------------------------------------------------------------------------;
 CalculateWindowPositions:
                 mov eax, [ebxctx.dwDPI]
@@ -2310,11 +2338,15 @@ SetStatus:
                 mov eax, esp
                 jmp .set_text8
 
-proc SaveSettings
+proc SaveSettingsGUI
                 local rect:RECT
-                local count:DWORD
 
-                ; [GUI]
+                mov eax, [ebxctx.pSettings]
+                cmp [eax + SETTINGS.GUI.dwMinimized], 0
+                jnz .exit
+                cmp [eax + SETTINGS.GUI.dwMaximized], 0
+                jnz .exit
+
                 lea eax, [rect]
                 push eax
                 push eax
@@ -2323,24 +2355,35 @@ proc SaveSettings
                 test eax, eax
                 pop eax
                 jz .exit
-                push esi
-                push edi
-                mov edi, [ebxctx.pSettings]
 
                 push [eax + RECT.bottom]
                 push [eax + RECT.right]
                 push [eax + RECT.top]
                 push [eax + RECT.left]
-                pop [edi + SETTINGS.GUI.x]
-                pop [edi + SETTINGS.GUI.y]
-                pop [edi + SETTINGS.GUI.cx]
-                pop [edi + SETTINGS.GUI.cy]
+                mov eax, [ebxctx.pSettings]
+                pop [eax + SETTINGS.GUI.x]
+                pop [eax + SETTINGS.GUI.y]
+                pop [eax + SETTINGS.GUI.cx]
+                pop [eax + SETTINGS.GUI.cy]
 
-                ; [Devices]
-                ; ...
+                ; WndProc handles GUI.dwMinimized & GUI.dwMaximized
+
+.exit:          ret
+endp
+
+proc SaveSettingsAll
+                local count:DWORD
+                push esi
+                push edi
+                push 0
+                pop [count]
+
+                ; [GUI]
+                call SaveSettingsGUI
 
                 ; [Commands]
-                mov [count], 0
+                ; mov [count], 0
+                mov edi, [ebxctx.pSettings]
                 lea edi, [edi + SETTINGS.cmd]
 .next_command:  push [count]
                 call GetCommand
@@ -2379,5 +2422,5 @@ proc SaveSettings
 
 .commands_done: pop edi
                 pop esi
-.exit:          ret
+                ret
 endp

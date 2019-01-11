@@ -154,6 +154,8 @@ proc ReadAppDataSettings pSettings:DWORD
                 xor edx, edx
                 call ecx
                 stosd ; [edi + SETTINGS.GUI.dwMinimized]
+                call ecx
+                stosd ; [edi + SETTINGS.GUI.dwMaximized]
 
                 ; [Commands]
                 mov eax, edi
@@ -297,20 +299,20 @@ proc WriteAppDataSettings pSettings:DWORD
                 lodsd ;mov eax, [pSettings + SETTINGS.GUI.x]
                 lea edi, [ebx + (settings.szKeyX - settings.szSectionGUI)]
                 call edx
-
                 lodsd ;mov eax, [pSettings + SETTINGS.GUI.y]
                 ;mov edi, settings.szKeyY
                 call edx
-
                 lodsd ;mov eax, [pSettings + SETTINGS.GUI.cx]
                 ;mov edi, settings.szKeyCX
                 call edx
-
                 lodsd ;mov eax, [pSettings + SETTINGS.GUI.cy]
                 ;mov edi, settings.szKeyCY
                 call edx
 
                 lodsd ;mov eax, [pSettings + SETTINGS.GUI.dwMinimized]
+                ;mov edi, settings.szMinimized
+                call edx
+                lodsd ;mov eax, [pSettings + SETTINGS.GUI.dwMaximized]
                 ;mov edi, settings.szMinimized
                 call edx
 

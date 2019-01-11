@@ -179,6 +179,7 @@ settings:
 .szKeyCX db 'cx',0
 .szKeyCY db 'cy',0
 .szMinimized db 'Minimized',0
+.szMaximized db 'Maximized',0
 
 .szRThumb        db 'RThumb',0
 .szRIndexFinger  db 'RIndex',0

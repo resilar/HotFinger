@@ -12,6 +12,7 @@ struct GUI_SETTINGS
   cx dd ?
   cy dd ?
   dwMinimized dd ?
+  dwMaximized dd ?
 ends
 
 struct COMMAND_SETTINGS
@@ -183,12 +184,17 @@ proc WinMain hInst:DWORD, hPrevInst:DWORD, szCmdLine:DWORD, nCmdShow:DWORD
                 call [MessageBoxA]
                 jmp .die
 
-.show_window:   mov esi, eax
+.show_window:   xor esi, esi
+                xchg eax, esi
                 lea edi, [msg]
-                cmp [ini + SETTINGS.GUI.dwMinimized], 0
+                cmp [ini + SETTINGS.GUI.dwMinimized], eax
                 jnz .show_in_tray
+                push SW_SHOWMAXIMIZED
+                cmp [ini + SETTINGS.GUI.dwMaximized], eax
+                pop eax
+                cmovz eax, [nCmdShow]
                 push esi
-                push [nCmdShow]
+                push eax
                 push esi
                 call [ShowWindow]
                 call [UpdateWindow]
