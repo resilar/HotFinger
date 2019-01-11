@@ -66,8 +66,8 @@ here](https://github.com/resilar/HotFinger/releases/latest).
   debug information if possible.
 
 - **Sane antivirus software** \
-  Unfortunately, [6/67 engines in
-  VirusTotal](https://www.virustotal.com/#/file-analysis/NzI2NmNkYWZjZjQ1NDlkNTEyMzQ1N2I2MGRmMmVkMzE6MTU0NzE0MjYyMg==)
+  Unfortunately, [6/70 engines in
+  VirusTotal](https://www.virustotal.com/#/file/1890234c881855c37c99eeb90599b5cd590c77fa95a7954468032b60ab2e91e4/detection)
   flag `hotfinger.exe` as malicious. Out of these, 2 are false detections of
   `Win32:MalOb-IJ [cryp]` and the remaining 4 are false positives reported by
   heuristics. This normally would not be a big deal, but it turns out that the 6
