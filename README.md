@@ -85,8 +85,8 @@ Contributors please use the flat editor `FASMW.EXE` to format your code.
 
 ## Q&A
 
-This is "Rants of an Old x86 Assembly Coder" section disguised as "Questions and
-Answers" section. Stop reading. Nothing significant follows.
+"Boomer x86 assembly coder rants about modern technology" section disguised as
+"Questions and Answers". Please, for your own sake, stop reading here.
 
 
 #### Why x86 assembly in ~~2018~~THE CURRENT YEAR?
