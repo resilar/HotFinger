@@ -74,6 +74,15 @@ here](https://github.com/resilar/HotFinger/releases/latest). Happy fingering!
   such as Avast, AVG, Cylance and Symantec. Therefore, add an exception for
   `hotfinger.exe` in your antivirus if you use one of those products.
 
+  **Update**: Fuck. It's 25/68 VirusTotal detections now. Apparently Bitdefender
+  classified `hotfinger.exe` as malware and created `Trojan.GenericKD.40939660`
+  signature for it (probably thanks to [Bitdefender machine learning based
+  threat detection](https://www.bitdefender.co.th/wp-content/uploads/gz/Bitdefender-2017-TechnicalBrief-MachineLearning-crea2103-A4-en-EN-2-GenericUse.pdf)
+  which misclassifies handwritten assembly code as "abnormal" and, therefore,
+  malicious by some retarded logic). The false positive detection rate shoots up
+  to 420% because nearly every other antivirus product on the market uses the
+  same Bitdefender scan engine and signature database.
+
 
 ## Geeks
 
