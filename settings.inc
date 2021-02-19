@@ -435,37 +435,31 @@ proc WriteAppDataSettings pSettings:DWORD
 endp
 
 DeleteAppDataSettings:
-                push ebp
-                mov ebp, esp
-                sub esp, MAX_PATH
-
                 push esi
                 push edi
+                sub esp, MAX_PATH
 
                 ; Delete settings.ini
-                lea esi, [esp+8];lea esi, [szSettingsPath]
-                push esi
+                push esp
                 call GetAppDataSettingsPath
-                push eax
-                push esi
+                lea edi, [esp+eax-1]
+                push esp
                 call [DeleteFileA]
-                pop ecx
 
                 ; Then try to remove the containing folder
                 mov al, '\'
-                dec ecx
-                lea edi, [esi+ecx]
+                mov ecx, edi
+                sub ecx, esp
                 std
                 repnz scasb
                 cld
-                inc edi
-                mov al, 0
-                stosb
+                jnz @f
+                mov byte [edi+1], 0
 
-                push esi
+                push esp
                 call [RemoveDirectoryA]
-
+@@:
+                add esp, MAX_PATH
                 pop edi
                 pop esi
-                leave
                 retn
