@@ -83,6 +83,10 @@ here](https://github.com/resilar/HotFinger/releases/latest). Happy fingering!
   to 420% because nearly every other antivirus product on the market uses the
   same Bitdefender scan engine and signature database.
 
+  **Update #2**: Today (2025-09-28) it's 28/73 false VirusTotal detections.
+  Aren't AV software just great? Anyway, it seems like Bitdefender does not
+  anymore detect HotFinger as a threat, so that's at least something :)
+
 
 ## Geeks
 
